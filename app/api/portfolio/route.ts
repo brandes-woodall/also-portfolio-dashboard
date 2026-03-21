@@ -7,7 +7,14 @@ export async function GET() {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?key=${apiKey}`;
 
   try {
-    const res = await fetch(url, { next: { revalidate: 3600 } });
+    const res = await fetch(url, { cache: 'no-store' });
+    
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Google Sheets error:', res.status, text);
+      return NextResponse.json({ error: 'Failed to fetch sheet data' }, { status: 500 });
+    }
+    
     const data = await res.json();
     const rows = data.values || [];
     if (rows.length === 0) return NextResponse.json([]);
