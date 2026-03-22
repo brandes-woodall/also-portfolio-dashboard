@@ -25,12 +25,17 @@ interface Company {
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────
+// For company cards: abbreviated with 2 decimal places
 const fmtUSD = (n: number) =>
   n >= 1_000_000
-    ? `$${(n / 1_000_000).toFixed(1)}M`
+    ? `$${(n / 1_000_000).toFixed(2)}M`
     : n >= 1_000
     ? `$${(n / 1_000).toFixed(0)}K`
     : `$${n.toFixed(0)}`;
+
+// For dashboard totals: full number with commas, no cents
+const fmtUSDFull = (n: number) =>
+  '$' + Math.round(n).toLocaleString('en-US');
 
 const fmtPct  = (n: number) => `${(n * 100).toFixed(1)}%`;
 const fmtMOIC = (n: number) => `${n.toFixed(1)}x`;
@@ -99,25 +104,6 @@ export default function Home() {
       return next;
     });
 
-  // ── Portfolio-level stats (across ALL companies, ignoring filters) ──────────
-  let totalInvested = 0;
-  let totalValue    = 0;
-  for (const c of companies) {
-    if (c.ac2Investment) {
-      totalInvested += c.ac2Investment;
-      totalValue    += getCurrentValue(c.ac2Investment, c.ac2Shares, c.ac2SafeCap, c.pricePerShare);
-    }
-    if (c.ac3Investment) {
-      totalInvested += c.ac3Investment;
-      totalValue    += getCurrentValue(c.ac3Investment, c.ac3Shares, c.ac3SafeCap, c.pricePerShare);
-    }
-    if (c.catalystInvestment) {
-      totalInvested += c.catalystInvestment;
-      totalValue    += getCurrentValue(c.catalystInvestment, c.catalystShares, c.catalystSafeCap, c.pricePerShare);
-    }
-  }
-  const portfolioMOIC = totalInvested > 0 ? totalValue / totalInvested : 0;
-
   // ── Filter ─────────────────────────────────────────────────────────────────
   const filtered = companies.filter((c) => {
     const fundOk =
@@ -130,6 +116,25 @@ export default function Home() {
       c.category.toLowerCase() === catFilter.toLowerCase();
     return fundOk && catOk;
   });
+
+  // ── Portfolio-level stats (based on filtered companies) ───────────────────
+  let totalInvested = 0;
+  let totalValue    = 0;
+  for (const c of filtered) {
+    if ((fundFilter === 'All' || fundFilter === 'AC2') && c.ac2Investment) {
+      totalInvested += c.ac2Investment;
+      totalValue    += getCurrentValue(c.ac2Investment, c.ac2Shares, c.ac2SafeCap, c.pricePerShare);
+    }
+    if ((fundFilter === 'All' || fundFilter === 'AC3') && c.ac3Investment) {
+      totalInvested += c.ac3Investment;
+      totalValue    += getCurrentValue(c.ac3Investment, c.ac3Shares, c.ac3SafeCap, c.pricePerShare);
+    }
+    if ((fundFilter === 'All' || fundFilter === 'Catalyst') && c.catalystInvestment) {
+      totalInvested += c.catalystInvestment;
+      totalValue    += getCurrentValue(c.catalystInvestment, c.catalystShares, c.catalystSafeCap, c.pricePerShare);
+    }
+  }
+  const portfolioMOIC = totalInvested > 0 ? totalValue / totalInvested : 0;
 
   if (loading) {
     return (
@@ -156,8 +161,8 @@ export default function Home() {
       {/* ── Portfolio Stats ── */}
       <div className="grid grid-cols-3 gap-4 mb-10">
         {[
-          { label: 'Total Invested',  value: fmtUSD(totalInvested) },
-          { label: 'Current Value',   value: fmtUSD(totalValue)    },
+          { label: 'Total Invested',  value: fmtUSDFull(totalInvested) },
+          { label: 'Current Value',   value: fmtUSDFull(totalValue)    },
           { label: 'Portfolio MOIC',  value: fmtMOIC(portfolioMOIC) },
         ].map((stat) => (
           <div key={stat.label} className="border border-gray-200 rounded-xl p-5">
@@ -215,9 +220,12 @@ export default function Home() {
           ].filter((f) => f.investment > 0);
 
           // Company-level totals
-          const companyInvested = funds.reduce((s, f) => s + f.investment, 0);
-          const companyValue    = funds.reduce(
+          const companyInvested   = funds.reduce((s, f) => s + f.investment, 0);
+          const companyValue      = funds.reduce(
             (s, f) => s + getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare), 0
+          );
+          const companyOwnership  = funds.reduce(
+            (s, f) => s + getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding), 0
           );
           const companyMOIC = companyInvested > 0 ? companyValue / companyInvested : 0;
 
@@ -228,7 +236,12 @@ export default function Home() {
             >
               {/* Card header: logo + name + website */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <a
+                  href={company.website ? (company.website.startsWith('http') ? company.website : `https://${company.website}`) : undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden hover:opacity-80 transition-opacity"
+                >
                   <Image
                     src={`/logos/${slug}.png`}
                     alt={company.name}
@@ -237,7 +250,7 @@ export default function Home() {
                     className="object-contain"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
-                </div>
+                </a>
                 <div className="min-w-0 flex-1">
                   <h2 className="font-semibold text-gray-900 truncate">{company.name}</h2>
                   {company.website && (
@@ -274,8 +287,8 @@ export default function Home() {
                   <p className="text-sm font-medium text-gray-800">{fmtUSD(companyInvested)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Value</p>
-                  <p className="text-sm font-medium text-gray-800">{fmtUSD(companyValue)}</p>
+                  <p className="text-xs text-gray-400">Ownership</p>
+                  <p className="text-sm font-medium text-gray-800">{fmtPct(companyOwnership)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">MOIC</p>
@@ -283,17 +296,15 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Fund breakdown (always shown if only 1 fund; expandable if multiple) */}
-              {funds.length > 1 && (
-                <button
-                  onClick={() => toggleExpand(company.name)}
-                  className="text-xs text-gray-400 hover:text-gray-600 mb-2 text-left"
-                >
-                  {isOpen ? '▲ Hide' : '▼ Show'} fund breakdown
-                </button>
-              )}
+            {/* Fund breakdown (always expandable) */}
+              <button
+                onClick={() => toggleExpand(company.name)}
+                className="text-xs text-gray-400 hover:text-gray-600 mb-2 text-left"
+              >
+                {isOpen ? '▲ Hide' : '▼ Show'} fund breakdown
+              </button>
 
-              {(isOpen || funds.length === 1) && (
+              {isOpen && (
                 <div className="space-y-2 mb-3">
                   {funds.map((f) => {
                     const safe      = isSafe(f.shares, f.safeCap);
