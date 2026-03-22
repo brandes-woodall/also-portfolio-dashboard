@@ -104,6 +104,30 @@ export default function Home() {
       return next;
     });
 
+    // ── Firm AUM (never changes with filters) ────────────────────────────────
+  const AC2_FUND_SIZE = 22_080_641;
+  const AC3_FUND_SIZE = 52_000_000;
+  let ac2Invested = 0, ac2Value = 0;
+  let ac3Invested = 0, ac3Value = 0;
+  let catalystValue = 0;
+  for (const c of companies) {
+    if (c.ac2Investment) {
+      ac2Invested += c.ac2Investment;
+      ac2Value    += getCurrentValue(c.ac2Investment, c.ac2Shares, c.ac2SafeCap, c.pricePerShare);
+    }
+    if (c.ac3Investment) {
+      ac3Invested += c.ac3Investment;
+      ac3Value    += getCurrentValue(c.ac3Investment, c.ac3Shares, c.ac3SafeCap, c.pricePerShare);
+    }
+    if (c.catalystInvestment) {
+      catalystValue += getCurrentValue(c.catalystInvestment, c.catalystShares, c.catalystSafeCap, c.pricePerShare);
+    }
+  }
+  const firmAUM =
+    (AC2_FUND_SIZE - ac2Invested + ac2Value) +
+    (AC3_FUND_SIZE - ac3Invested + ac3Value) +
+    catalystValue;
+
   // ── Filter ─────────────────────────────────────────────────────────────────
   const filtered = companies.filter((c) => {
     const fundOk =
@@ -159,7 +183,7 @@ export default function Home() {
       </div>
 
       {/* ── Portfolio Stats ── */}
-      <div className="grid grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-4 gap-4 mb-10">
         {[
           { label: 'Total Invested',  value: fmtUSDFull(totalInvested) },
           { label: 'Current Value',   value: fmtUSDFull(totalValue)    },
@@ -170,6 +194,10 @@ export default function Home() {
             <p className="text-2xl font-medium text-gray-900">{stat.value}</p>
           </div>
         ))}
+        <div className="border border-gray-200 rounded-xl p-5">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Firm AUM</p>
+          <p className="text-2xl font-medium text-gray-900">{fmtUSDFull(firmAUM)}</p>
+        </div>
       </div>
 
       {/* ── Filters ── */}
