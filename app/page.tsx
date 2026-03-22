@@ -1,255 +1,372 @@
 'use client';
+
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 interface Company {
-  name: string; foundingTeam: string; linkedin: string;
-  emails: string; website: string; fund: string; category: string;
-  ac2Investment: number; ac2Shares: number;
-  ac3Investment: number; ac3Shares: number;
-  catalystInvestment: number; catalystShares: number;
-  pricePerShare: number; sharesOutstanding: number;
+  name: string;
+  foundingTeam: string;
+  linkedin: string;
+  emails: string;
+  website: string;
+  fund: string;
+  category: string;
+  ac2Investment: number;
+  ac2Shares: number;
+  ac3Investment: number;
+  ac3Shares: number;
+  catalystInvestment: number;
+  catalystShares: number;
+  pricePerShare: number;
+  sharesOutstanding: number;
+  ac2SafeCap: number;
+  ac3SafeCap: number;
+  catalystSafeCap: number;
 }
 
-interface Founder { name: string; linkedin: string; email: string; }
+// ── Formatters ────────────────────────────────────────────────────────────────
+const fmtUSD = (n: number) =>
+  n >= 1_000_000
+    ? `$${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000
+    ? `$${(n / 1_000).toFixed(0)}K`
+    : `$${n.toFixed(0)}`;
 
-function getDomain(website: string) {
-  try { return new URL(website.startsWith('http') ? website : `https://${website}`).hostname.replace('www.', ''); }
-  catch { return ''; }
-}
+const fmtPct  = (n: number) => `${(n * 100).toFixed(1)}%`;
+const fmtMOIC = (n: number) => `${n.toFixed(1)}x`;
 
-function parseFounders(foundingTeam: string, linkedin: string, emails: string): Founder[] {
-  const names = foundingTeam.split(',').map(s => s.trim()).filter(Boolean);
-  const links = linkedin.split(',').map(s => s.trim()).filter(Boolean);
-  const mails = emails.split(',').map(s => s.trim()).filter(Boolean);
-  return names.map((name, i) => ({ name, linkedin: links[i] || '', email: mails[i] || '' }));
-}
+const toSlug = (name: string) =>
+  name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-function fmt$(n: number) {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
-}
-function fmtPct(n: number) { return `${(n * 100).toFixed(1)}%`; }
-function fmtMOIC(n: number) { return `${n.toFixed(1)}x`; }
+// ── SAFE helpers ──────────────────────────────────────────────────────────────
+// A position is a SAFE when shares = 0 and a safe cap is present
+const isSafe = (shares: number, safeCap: number) => shares === 0 && safeCap > 0;
 
-type FundFilter = 'All' | 'AC2' | 'AC3' | 'Catalyst';
-type CategoryFilter = 'All' | 'Core' | 'Opportunistic';
+const getCurrentValue = (
+  investment: number,
+  shares: number,
+  safeCap: number,
+  pricePerShare: number
+): number => {
+  if (!investment) return 0;
+  if (isSafe(shares, safeCap)) return investment; // SAFEs carried at cost
+  if (!shares || !pricePerShare) return 0;
+  return shares * pricePerShare;
+};
 
-function FilterButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1 rounded-full text-xs font-medium border transition-all duration-200 ${
-        active
-          ? 'bg-gray-900 text-white border-gray-900'
-          : 'bg-white text-gray-600 border-yellow-200 hover:border-yellow-500'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+const getOwnership = (
+  investment: number,
+  shares: number,
+  safeCap: number,
+  sharesOutstanding: number
+): number => {
+  if (!investment) return 0;
+  if (isSafe(shares, safeCap)) return safeCap > 0 ? investment / safeCap : 0;
+  if (!shares || !sharesOutstanding) return 0;
+  return shares / sharesOutstanding;
+};
 
-function CompanyCard({ company, fundFilter }: { company: Company; fundFilter: FundFilter }) {
-  const domain = getDomain(company.website);
-  const [logoError, setLogoError] = useState(false);
-  const [showBreakdown, setShowBreakdown] = useState(false);
-  const fundTags = company.fund.split(',').map(f => f.trim()).filter(Boolean);
-  const founders = parseFounders(company.foundingTeam, company.linkedin, company.emails);
-  const websiteUrl = company.website.startsWith('http') ? company.website : `https://${company.website}`;
+const getMOIC = (
+  investment: number,
+  shares: number,
+  safeCap: number,
+  pricePerShare: number
+): number => {
+  if (!investment) return 0;
+  if (isSafe(shares, safeCap)) return 1.0; // SAFEs always 1x
+  if (!shares || !pricePerShare) return 0;
+  return (shares * pricePerShare) / investment;
+};
 
-  const totalInvested = company.ac2Investment + company.ac3Investment + company.catalystInvestment;
-  const totalShares = company.ac2Shares + company.ac3Shares + company.catalystShares;
-  const totalOwnership = company.sharesOutstanding > 0 ? totalShares / company.sharesOutstanding : 0;
-  const moic = totalInvested > 0 ? (totalShares * company.pricePerShare) / totalInvested : 0;
-  const hasStats = totalInvested > 0;
-
-  const fundBreakdown = [
-    { name: 'AC2', investment: company.ac2Investment, shares: company.ac2Shares },
-    { name: 'AC3', investment: company.ac3Investment, shares: company.ac3Shares },
-    { name: 'Catalyst', investment: company.catalystInvestment, shares: company.catalystShares },
-  ].filter(f => f.investment > 0 || f.shares > 0).map(f => ({
-    ...f,
-    ownership: company.sharesOutstanding > 0 ? f.shares / company.sharesOutstanding : 0,
-    moic: f.investment > 0 ? (f.shares * company.pricePerShare) / f.investment : 0,
-  }));
-
-  return (
-    <div style={{ backgroundColor: '#fffef5' }} className="rounded-xl border border-yellow-100 p-5 hover:border-yellow-500 transition-colors">
-      <div className="flex items-center gap-3 mb-4">
-        <a href={websiteUrl} target="_blank" rel="noopener noreferrer">
-          {domain && !logoError ? (
-            <img
-              src={`/logos/${company.name.toLowerCase().replace(/\s+/g, '-')}.png`}
-              alt={company.name}
-              className="w-10 h-10 rounded-lg object-contain bg-white p-1 border border-yellow-100 hover:bg-[#fffef5] hover:border-yellow-500 transition-all duration-200"
-              onError={() => setLogoError(true)}
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-lg bg-white border border-yellow-100 flex items-center justify-center text-sm font-bold text-gray-500 hover:bg-[#fffef5] hover:border-yellow-500 transition-all duration-200">
-              {company.name.charAt(0)}
-            </div>
-          )}
-        </a>
-        <div>
-          <h3 className="font-semibold text-gray-900">{company.name}</h3>
-          <div className="flex flex-wrap gap-1.5 mt-1">
-            {fundTags.map(tag => (
-              <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-white border border-yellow-200 text-gray-600 font-medium">{tag}</span>
-            ))}
-            {company.category && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-white border border-yellow-200 text-gray-500">{company.category}</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {hasStats && (
-        <div className="mb-4">
-          <button
-            onClick={() => setShowBreakdown(!showBreakdown)}
-            className="w-full bg-white border border-yellow-100 rounded-lg p-3 hover:border-yellow-500 transition-colors text-left"
-          >
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">Total Invested</p>
-                <p className="text-sm font-semibold text-gray-800">{fmt$(totalInvested)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">Ownership</p>
-                <p className="text-sm font-semibold text-gray-800">{fmtPct(totalOwnership)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-400 mb-0.5">MOIC</p>
-                <p className="text-sm font-semibold text-gray-800">{fmtMOIC(moic)}</p>
-              </div>
-            </div>
-            {fundBreakdown.length > 1 && (
-              <p className="text-xs text-gray-400 text-center mt-2">{showBreakdown ? '▲ hide breakdown' : '▼ view by fund'}</p>
-            )}
-          </button>
-
-          {showBreakdown && fundBreakdown.length > 1 && (
-            <div className="mt-2 space-y-1">
-              {fundBreakdown.map(f => (
-                <div key={f.name} className="bg-white border border-yellow-100 rounded-lg px-3 py-2 hover:border-yellow-500 transition-colors">
-                  <div className="grid grid-cols-4 gap-2 items-center">
-                    <span className="text-xs font-medium text-gray-600">{f.name}</span>
-                    <span className="text-xs text-gray-700 text-center">{fmt$(f.investment)}</span>
-                    <span className="text-xs text-gray-700 text-center">{fmtPct(f.ownership)}</span>
-                    <span className="text-xs text-gray-700 text-center">{fmtMOIC(f.moic)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {founders.length > 0 && (
-        <div className="space-y-2">
-          {founders.map((founder, i) => (
-            <div key={i} className="bg-white rounded-lg p-3 border border-yellow-100 hover:bg-[#fffef5] hover:border-yellow-500 transition-all duration-200">
-              {founder.linkedin ? (
-                <a href={founder.linkedin} target="_blank" rel="noopener noreferrer"
-                  className="text-sm font-medium text-gray-800 hover:text-yellow-500 hover:underline transition-colors">
-                  {founder.name}
-                </a>
-              ) : (
-                <p className="text-sm font-medium text-gray-800">{founder.name}</p>
-              )}
-              <div className="flex gap-3 mt-1 flex-wrap">
-                {founder.email && (
-                  <a href={`mailto:${founder.email}`} className="text-xs text-gray-500 hover:text-yellow-500 hover:underline transition-colors">
-                    {founder.email}
-                  </a>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
+// ── Main component ────────────────────────────────────────────────────────────
 export default function Home() {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fundFilter, setFundFilter] = useState<FundFilter>('All');
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('All');
+  const [companies, setCompanies]       = useState<Company[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [fundFilter, setFundFilter]     = useState('All');
+  const [catFilter, setCatFilter]       = useState('All');
+  const [expanded, setExpanded]         = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch('/api/portfolio').then(r => r.json())
-      .then(d => { setCompanies(Array.isArray(d) ? d : []); setLoading(false); })
-      .catch(() => setLoading(false));
+    fetch('/api/portfolio')
+      .then((r) => r.json())
+      .then((data) => { setCompanies(data); setLoading(false); });
   }, []);
 
-  const filteredCompanies = companies.filter(c => {
-    if (fundFilter === 'AC2' && !(c.ac2Investment > 0 || c.ac2Shares > 0)) return false;
-    if (fundFilter === 'AC3' && !(c.ac3Investment > 0 || c.ac3Shares > 0)) return false;
-    if (fundFilter === 'Catalyst' && !(c.catalystInvestment > 0 || c.catalystShares > 0)) return false;
-    if (categoryFilter !== 'All' && !c.category.toLowerCase().includes(categoryFilter.toLowerCase())) return false;
-    return true;
+  const toggleExpand = (name: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+
+  // ── Portfolio-level stats (across ALL companies, ignoring filters) ──────────
+  let totalInvested = 0;
+  let totalValue    = 0;
+  for (const c of companies) {
+    if (c.ac2Investment) {
+      totalInvested += c.ac2Investment;
+      totalValue    += getCurrentValue(c.ac2Investment, c.ac2Shares, c.ac2SafeCap, c.pricePerShare);
+    }
+    if (c.ac3Investment) {
+      totalInvested += c.ac3Investment;
+      totalValue    += getCurrentValue(c.ac3Investment, c.ac3Shares, c.ac3SafeCap, c.pricePerShare);
+    }
+    if (c.catalystInvestment) {
+      totalInvested += c.catalystInvestment;
+      totalValue    += getCurrentValue(c.catalystInvestment, c.catalystShares, c.catalystSafeCap, c.pricePerShare);
+    }
+  }
+  const portfolioMOIC = totalInvested > 0 ? totalValue / totalInvested : 0;
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  const filtered = companies.filter((c) => {
+    const fundOk =
+      fundFilter === 'All' ||
+      (fundFilter === 'AC2'      && c.ac2Investment > 0)      ||
+      (fundFilter === 'AC3'      && c.ac3Investment > 0)      ||
+      (fundFilter === 'Catalyst' && c.catalystInvestment > 0);
+    const catOk =
+      catFilter === 'All' ||
+      c.category.toLowerCase() === catFilter.toLowerCase();
+    return fundOk && catOk;
   });
 
-  const portfolioStats = filteredCompanies.reduce((acc, c) => {
-    let invested = 0;
-    let currentValue = 0;
-    if (fundFilter === 'All' || fundFilter === 'AC2') { invested += c.ac2Investment; currentValue += c.ac2Shares * c.pricePerShare; }
-    if (fundFilter === 'All' || fundFilter === 'AC3') { invested += c.ac3Investment; currentValue += c.ac3Shares * c.pricePerShare; }
-    if (fundFilter === 'All' || fundFilter === 'Catalyst') { invested += c.catalystInvestment; currentValue += c.catalystShares * c.pricePerShare; }
-    return { invested: acc.invested + invested, currentValue: acc.currentValue + currentValue };
-  }, { invested: 0, currentValue: 0 });
-
-  const portfolioMOIC = portfolioStats.invested > 0 ? portfolioStats.currentValue / portfolioStats.invested : 0;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <p className="text-gray-400 text-lg">Loading portfolio…</p>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Portfolio Dashboard</h1>
+    <main className="min-h-screen bg-white px-8 py-10 max-w-7xl mx-auto">
 
-        {/* Portfolio Stats */}
-        <div style={{ backgroundColor: '#fffef5' }} className="rounded-xl border border-yellow-100 p-6 mb-6">
-          <div className="grid grid-cols-3 gap-6 text-center">
-            <div>
-              <p className="text-sm text-gray-400 mb-1">Total Invested Capital</p>
-              <p className="text-2xl font-bold text-gray-900">{fmt$(portfolioStats.invested)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400 mb-1">Current Value</p>
-              <p className="text-2xl font-bold text-gray-900">{fmt$(portfolioStats.currentValue)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-400 mb-1">MOIC</p>
-              <p className="text-2xl font-bold text-gray-900">{fmtMOIC(portfolioMOIC)}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-4 mb-8 items-center">
-          <div className="flex gap-2">
-            {(['All', 'AC2', 'AC3', 'Catalyst'] as FundFilter[]).map(f => (
-              <FilterButton key={f} label={f} active={fundFilter === f} onClick={() => setFundFilter(f)} />
-            ))}
-          </div>
-          <div className="w-px h-4 bg-gray-200" />
-          <div className="flex gap-2">
-            {(['All', 'Core', 'Opportunistic'] as CategoryFilter[]).map(c => (
-              <FilterButton key={c} label={c} active={categoryFilter === c} onClick={() => setCategoryFilter(c)} />
-            ))}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="text-gray-400 text-center py-20">Loading...</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredCompanies.map(c => <CompanyCard key={c.name} company={c} fundFilter={fundFilter} />)}
-          </div>
-        )}
+      {/* ── Header ── */}
+      <div className="mb-8">
+        <h1
+          className="text-4xl font-semibold text-gray-900"
+          style={{ fontFamily: 'var(--font-eb-garamond)' }}
+        >
+          Also Capital Portfolio
+        </h1>
+        <p className="text-gray-400 text-sm mt-1">{companies.length} companies</p>
       </div>
+
+      {/* ── Portfolio Stats ── */}
+      <div className="grid grid-cols-3 gap-4 mb-10">
+        {[
+          { label: 'Total Invested',  value: fmtUSD(totalInvested) },
+          { label: 'Current Value',   value: fmtUSD(totalValue)    },
+          { label: 'Portfolio MOIC',  value: fmtMOIC(portfolioMOIC) },
+        ].map((stat) => (
+          <div key={stat.label} className="border border-gray-200 rounded-xl p-5">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{stat.label}</p>
+            <p className="text-2xl font-medium text-gray-900">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filters ── */}
+      <div className="flex items-center gap-2 flex-wrap mb-8">
+        {['All', 'AC2', 'AC3', 'Catalyst'].map((f) => (
+          <button
+            key={f}
+            onClick={() => setFundFilter(f)}
+            className={`px-4 py-1.5 rounded-full text-sm border transition-colors ${
+              fundFilter === f
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+        <div className="w-px h-6 bg-gray-200 mx-1" />
+        {['All', 'Core', 'Opportunistic'].map((c) => (
+          <button
+            key={c}
+            onClick={() => setCatFilter(c)}
+            className={`px-4 py-1.5 rounded-full text-sm border transition-colors ${
+              catFilter === c
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Company Grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.map((company) => {
+          const slug      = toSlug(company.name);
+          const founders  = company.foundingTeam.split(',').map((s) => s.trim()).filter(Boolean);
+          const linkedins = company.linkedin.split(',').map((s) => s.trim()).filter(Boolean);
+          const emails    = company.emails.split(',').map((s) => s.trim()).filter(Boolean);
+          const isOpen    = expanded.has(company.name);
+
+          // Build active funds for this company
+          const funds = [
+            { label: 'AC2',      investment: company.ac2Investment,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
+            { label: 'AC3',      investment: company.ac3Investment,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap      },
+            { label: 'Catalyst', investment: company.catalystInvestment, shares: company.catalystShares, safeCap: company.catalystSafeCap },
+          ].filter((f) => f.investment > 0);
+
+          // Company-level totals
+          const companyInvested = funds.reduce((s, f) => s + f.investment, 0);
+          const companyValue    = funds.reduce(
+            (s, f) => s + getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare), 0
+          );
+          const companyMOIC = companyInvested > 0 ? companyValue / companyInvested : 0;
+
+          return (
+            <div
+              key={company.name}
+              className="border border-gray-200 rounded-xl p-5 hover:border-yellow-500 hover:bg-[#fffef5] transition-all duration-150 flex flex-col"
+            >
+              {/* Card header: logo + name + website */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <Image
+                    src={`/logos/${slug}.png`}
+                    alt={company.name}
+                    width={40}
+                    height={40}
+                    className="object-contain"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-semibold text-gray-900 truncate">{company.name}</h2>
+                  {company.website && (
+                    <a
+                      href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-gray-400 hover:text-gray-600 truncate block"
+                    >
+                      {company.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div className="flex gap-1.5 flex-wrap mb-4">
+                {funds.map((f) => (
+                  <span key={f.label} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    {f.label}
+                  </span>
+                ))}
+                {company.category && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
+                    {company.category}
+                  </span>
+                )}
+              </div>
+
+              {/* Company-level summary stats */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div>
+                  <p className="text-xs text-gray-400">Invested</p>
+                  <p className="text-sm font-medium text-gray-800">{fmtUSD(companyInvested)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Value</p>
+                  <p className="text-sm font-medium text-gray-800">{fmtUSD(companyValue)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">MOIC</p>
+                  <p className="text-sm font-medium text-gray-800">{fmtMOIC(companyMOIC)}</p>
+                </div>
+              </div>
+
+              {/* Fund breakdown (always shown if only 1 fund; expandable if multiple) */}
+              {funds.length > 1 && (
+                <button
+                  onClick={() => toggleExpand(company.name)}
+                  className="text-xs text-gray-400 hover:text-gray-600 mb-2 text-left"
+                >
+                  {isOpen ? '▲ Hide' : '▼ Show'} fund breakdown
+                </button>
+              )}
+
+              {(isOpen || funds.length === 1) && (
+                <div className="space-y-2 mb-3">
+                  {funds.map((f) => {
+                    const safe      = isSafe(f.shares, f.safeCap);
+                    const value     = getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare);
+                    const ownership = getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding);
+                    const moic      = getMOIC(f.investment, f.shares, f.safeCap, company.pricePerShare);
+
+                    return (
+                      <div key={f.label} className="bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-700">{f.label}</span>
+                          {safe && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium">
+                              SAFE
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <p className="text-xs text-gray-400">Invested</p>
+                            <p className="text-xs font-medium text-gray-700">{fmtUSD(f.investment)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">Ownership</p>
+                            <p className="text-xs font-medium text-gray-700">{fmtPct(ownership)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">MOIC</p>
+                            <p className="text-xs font-medium text-gray-700">{fmtMOIC(moic)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Founder cards */}
+              {founders.length > 0 && (
+                <div className="border-t border-gray-100 pt-3 mt-auto space-y-2">
+                  {founders.map((founder, i) => (
+                    <div key={i} className="flex items-start justify-between">
+                      <div>
+                        {linkedins[i] ? (
+                          <a
+                            href={linkedins[i].startsWith('http') ? linkedins[i] : `https://${linkedins[i]}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-gray-800 hover:text-yellow-600 hover:underline"
+                          >
+                            {founder}
+                          </a>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-800">{founder}</p>
+                        )}
+                        {emails[i] && (
+                          <p className="text-xs text-gray-400">{emails[i]}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="text-center py-20 text-gray-400">
+          No companies match the selected filters.
+        </div>
+      )}
     </main>
   );
 }
