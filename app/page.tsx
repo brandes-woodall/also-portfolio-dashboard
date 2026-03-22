@@ -173,11 +173,18 @@ export default function Home() {
 
       {/* ── Header ── */}
       <div className="mb-8">
+        <Image
+          src="/logos/also-capital.png"
+          alt="Also Capital"
+          width={160}
+          height={40}
+          className="object-contain mb-3"
+        />
         <h1
           className="text-4xl font-semibold text-gray-900"
           style={{ fontFamily: 'var(--font-eb-garamond)' }}
         >
-          Also Capital Portfolio
+          Portfolio Dashboard
         </h1>
         <p className="text-gray-400 text-sm mt-1">{companies.length} companies</p>
       </div>
