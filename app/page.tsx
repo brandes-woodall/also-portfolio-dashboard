@@ -186,7 +186,7 @@ export default function Home() {
         >
           Portfolio Dashboard
         </h1>
-        <p className="text-gray-400 text-sm mt-1">{companies.length} companies</p>
+        <p className="text-gray-400 text-sm mt-1">{filtered.length} companies</p>
       </div>
 
       {/* ── Portfolio Stats ── */}
