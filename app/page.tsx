@@ -175,7 +175,7 @@ function EmailSection({ slug }: { slug: string }) {
     e.target.value = '';
   };
 
-  const visible = showAll ? emails : emails.slice(0, 1);
+  const visible = showAll ? emails : emails.slice(0, 3);
 
   const EmailRow = ({ email }: { email: Email }) => (
     <button
@@ -211,12 +211,12 @@ function EmailSection({ slug }: { slug: string }) {
         ) : (
           <div className="space-y-1">
             {visible.map((email) => <EmailRow key={email.id} email={email} />)}
-            {emails.length > 1 && (
+            {emails.length > 3 && (
               <button
                 onClick={() => setShowAll((s) => !s)}
                 className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
               >
-                {showAll ? '▲ Show less' : `▼ ${emails.length - 1} more`}
+                {showAll ? '▲ Show less' : `▼ ${emails.length - 3} more`}
               </button>
             )}
           </div>
@@ -225,6 +225,60 @@ function EmailSection({ slug }: { slug: string }) {
 
       {openEmail && <EmailModal email={openEmail} onClose={() => setOpenEmail(null)} />}
     </>
+  );
+}
+
+// ── Video embed helpers ────────────────────────────────────────────────────────
+function getEmbedUrl(url: string): string | null {
+  // YouTube
+  const ytPatterns = [
+    /youtube\.com\/watch\?(?:.*&)?v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const re of ytPatterns) {
+    const m = url.match(re);
+    if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+  }
+  // Box  — share links: app.box.com/s/HASH or company.box.com/s/HASH
+  const boxMatch = url.match(/box\.com\/s\/([a-zA-Z0-9]+)/);
+  if (boxMatch) return `https://app.box.com/embed/preview/${boxMatch[1]}?direction=ASC&theme=dark`;
+  // Google Drive — drive.google.com/file/d/FILE_ID/view
+  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (driveMatch) return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+
+  return null;
+}
+
+function VideoModal({ title, embedUrl, onClose }: { title: string; embedUrl: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-4xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-2 px-1">
+          <p className="text-white/60 text-xs truncate flex-1 mr-4">{title}</p>
+          <button
+            onClick={onClose}
+            className="text-white/60 hover:text-white text-2xl leading-none shrink-0"
+          >
+            ×
+          </button>
+        </div>
+        <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+          <iframe
+            src={embedUrl}
+            className="absolute inset-0 w-full h-full rounded-xl"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -284,6 +338,7 @@ function MediaSection({ slug }: { slug: string }) {
   const [saving, setSaving]         = useState(false);
   const [uploading, setUploading]   = useState(false);
   const [lightbox, setLightbox]     = useState<MediaItem | null>(null);
+  const [videoModal, setVideoModal] = useState<MediaItem | null>(null);
   const [editingId, setEditingId]   = useState<string | null>(null);
   const [editDate, setEditDate]     = useState('');
   const [editSaving, setEditSaving] = useState(false);
@@ -368,7 +423,7 @@ function MediaSection({ slug }: { slug: string }) {
     e.target.value = '';
   };
 
-  const visible = showAll ? items : items.slice(0, 1);
+  const visible = showAll ? items : items.slice(0, 3);
 
   return (
     <>
@@ -459,11 +514,13 @@ function MediaSection({ slug }: { slug: string }) {
                   // ── Video link row ──────────────────────────────────────────
                   <>
                     <div className="flex items-start gap-2.5 p-2.5">
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-start gap-2.5 flex-1 min-w-0"
+                      <button
+                        onClick={() => {
+                          const embed = getEmbedUrl(item.url!);
+                          if (embed) setVideoModal(item);
+                          else window.open(item.url, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="flex items-start gap-2.5 flex-1 min-w-0 text-left"
                       >
                         <div className="w-12 h-12 rounded overflow-hidden bg-gray-800 shrink-0 flex items-center justify-center relative">
                           {item.thumbnail ? (
@@ -494,7 +551,7 @@ function MediaSection({ slug }: { slug: string }) {
                             <p className="text-xs text-gray-300 mt-0.5">missing details</p>
                           )}
                         </div>
-                      </a>
+                      </button>
                       <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => editingId === item.id ? closeEdit() : openEdit(item)}
@@ -558,12 +615,12 @@ function MediaSection({ slug }: { slug: string }) {
                 )}
               </div>
             ))}
-            {items.length > 1 && (
+            {items.length > 3 && (
               <button
                 onClick={() => setShowAll((s) => !s)}
                 className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
               >
-                {showAll ? '▲ Show less' : `▼ ${items.length - 1} more`}
+                {showAll ? '▲ Show less' : `▼ ${items.length - 3} more`}
               </button>
             )}
           </div>
@@ -573,6 +630,16 @@ function MediaSection({ slug }: { slug: string }) {
       {lightbox && (
         <MediaLightbox item={lightbox} slug={slug} onClose={() => setLightbox(null)} />
       )}
+      {videoModal && (() => {
+        const embedUrl = getEmbedUrl(videoModal.url!);
+        return embedUrl ? (
+          <VideoModal
+            title={videoModal.title ?? ''}
+            embedUrl={embedUrl}
+            onClose={() => setVideoModal(null)}
+          />
+        ) : null;
+      })()}
     </>
   );
 }
@@ -648,7 +715,7 @@ function PressSection({ slug }: { slug: string }) {
     e.target.value = '';
   };
 
-  const visibleLinks = showAll ? links : links.slice(0, 1);
+  const visibleLinks = showAll ? links : links.slice(0, 3);
 
   return (
     <div>
@@ -796,12 +863,12 @@ function PressSection({ slug }: { slug: string }) {
             </div>
           ))
         )}
-        {links.length > 1 && (
+        {links.length > 3 && (
           <button
             onClick={() => setShowAll((s) => !s)}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
           >
-            {showAll ? '▲ Show less' : `▼ ${links.length - 1} more`}
+            {showAll ? '▲ Show less' : `▼ ${links.length - 3} more`}
           </button>
         )}
       </div>
