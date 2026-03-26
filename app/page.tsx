@@ -231,10 +231,17 @@ function EmailSection({ slug }: { slug: string }) {
 // ── MediaLightbox ─────────────────────────────────────────────────────────────
 interface MediaItem {
   id: string;
-  filename: string;
-  originalName: string;
-  type: 'image' | 'video';
-  mimeType: string;
+  type: 'image' | 'video-link';
+  // image fields
+  filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  // video-link fields
+  url?: string;
+  title?: string;
+  thumbnail?: string | null;
+  date?: string | null;
+  // common
   uploadedAt: string;
 }
 
@@ -256,21 +263,12 @@ function MediaLightbox({ item, slug, onClose }: { item: MediaItem; slug: string;
           ×
         </button>
         <p className="text-white/50 text-xs mb-2 truncate max-w-full">{item.originalName}</p>
-        {item.type === 'image' ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={src}
-            alt={item.originalName}
-            className="max-h-[80vh] max-w-full rounded-xl object-contain"
-          />
-        ) : (
-          <video
-            src={src}
-            controls
-            autoPlay
-            className="max-h-[80vh] max-w-full rounded-xl"
-          />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={item.originalName}
+          className="max-h-[80vh] max-w-full rounded-xl object-contain"
+        />
       </div>
     </div>
   );
@@ -278,15 +276,39 @@ function MediaLightbox({ item, slug, onClose }: { item: MediaItem; slug: string;
 
 // ── MediaSection ──────────────────────────────────────────────────────────────
 function MediaSection({ slug }: { slug: string }) {
-  const [items, setItems]         = useState<MediaItem[]>([]);
-  const [showAll, setShowAll]     = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [lightbox, setLightbox]   = useState<MediaItem | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [items, setItems]           = useState<MediaItem[]>([]);
+  const [showAll, setShowAll]       = useState(false);
+  const [addMode, setAddMode]       = useState<'none' | 'link' | 'image'>('none');
+  const [url, setUrl]               = useState('');
+  const [title, setTitle]           = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [uploading, setUploading]   = useState(false);
+  const [lightbox, setLightbox]     = useState<MediaItem | null>(null);
+  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [editDate, setEditDate]     = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const thumbRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch(`/api/media/${slug}`).then(r => r.json()).then(setItems);
+    fetch(`/api/media/${slug}`).then((r) => r.json()).then(setItems);
   }, [slug]);
+
+  const saveLink = async () => {
+    if (!url.trim()) return;
+    setSaving(true);
+    const res  = await fetch(`/api/media/${slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url.trim(), title: title.trim() || url.trim() }),
+    });
+    const item = await res.json();
+    setItems((prev) => [item, ...prev]);
+    setUrl('');
+    setTitle('');
+    setAddMode('none');
+    setSaving(false);
+  };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -298,12 +320,52 @@ function MediaSection({ slug }: { slug: string }) {
     const item = await res.json();
     if (!item.error) setItems((prev) => [item, ...prev]);
     setUploading(false);
+    setAddMode('none');
     e.target.value = '';
   };
 
   const remove = async (id: string) => {
     await fetch(`/api/media/${slug}?id=${id}`, { method: 'DELETE' });
     setItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const openEdit = (item: MediaItem) => {
+    setEditingId(item.id);
+    setEditDate(item.date ? new Date(item.date).toISOString().split('T')[0] : '');
+  };
+  const closeEdit = () => { setEditingId(null); setEditDate(''); };
+
+  const saveDate = async (id: string) => {
+    setEditSaving(true);
+    const res = await fetch(`/api/media/${slug}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, date: editDate ? new Date(editDate).toISOString() : null }),
+    });
+    const updated = await res.json();
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, date: updated.date } : i));
+    setEditSaving(false);
+    closeEdit();
+  };
+
+  const handleThumbUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditSaving(true);
+    const form = new FormData();
+    form.append('file', file);
+    // Reuse press-thumbs endpoint for simplicity
+    const res = await fetch(`/api/press-thumbs/${slug}/${id}`, { method: 'POST', body: form });
+    const { thumbnail } = await res.json();
+    // Save thumbnail via PATCH
+    await fetch(`/api/media/${slug}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, thumbnail }),
+    });
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, thumbnail } : i));
+    setEditSaving(false);
+    e.target.value = '';
   };
 
   const visible = showAll ? items : items.slice(0, 1);
@@ -313,42 +375,194 @@ function MediaSection({ slug }: { slug: string }) {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-gray-400">Media</span>
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
-          >
-            {uploading ? 'Uploading…' : '↑ Image / Video'}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFile} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAddMode((m) => m === 'link' ? 'none' : 'link')}
+              className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
+            >
+              {addMode === 'link' ? 'Cancel' : '+ Link'}
+            </button>
+            <button
+              onClick={() => { setAddMode('none'); fileRef.current?.click(); }}
+              disabled={uploading}
+              className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
+            >
+              {uploading ? 'Uploading…' : '↑ Image'}
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          </div>
         </div>
+
+        {addMode === 'link' && (
+          <div className="mb-1.5 space-y-1">
+            <input
+              type="url"
+              placeholder="https://youtube.com/watch?v=… or drive.google.com/…"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveLink()}
+              autoFocus
+              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
+            />
+            <input
+              type="text"
+              placeholder="Title (optional — auto-fetched)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && saveLink()}
+              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
+            />
+            <button
+              onClick={saveLink}
+              disabled={!url.trim() || saving}
+              className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 disabled:opacity-40 transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save link'}
+            </button>
+          </div>
+        )}
 
         {items.length === 0 ? (
           <p className="text-xs text-gray-300 py-1">No media yet</p>
         ) : (
           <div className="space-y-1">
             {visible.map((item) => (
-              <div key={item.id} className="rounded-lg bg-gray-50 group border border-transparent hover:border-yellow-200 transition-colors">
-                <div className="flex items-center gap-2.5 p-2">
-                  <button onClick={() => setLightbox(item)} className="w-10 h-10 rounded overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity">
-                    {item.type === 'image' ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`/api/media-files/${slug}/${item.filename}`} alt={item.originalName} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                        <span className="text-white text-xs">▶</span>
+              <div key={item.id} className="rounded-lg bg-gray-50 group overflow-hidden border border-transparent hover:border-yellow-200 transition-colors">
+                {item.type === 'image' ? (
+                  // ── Image row ───────────────────────────────────────────────
+                  <div className="flex items-center gap-2.5 p-2">
+                    <button
+                      onClick={() => setLightbox(item)}
+                      className="w-10 h-10 rounded overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/media-files/${slug}/${item.filename}`}
+                        alt={item.originalName}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                    <button
+                      onClick={() => setLightbox(item)}
+                      className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left"
+                    >
+                      {item.originalName}
+                    </button>
+                    <button
+                      onClick={() => remove(item.id)}
+                      className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs shrink-0"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  // ── Video link row ──────────────────────────────────────────
+                  <>
+                    <div className="flex items-start gap-2.5 p-2.5">
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-2.5 flex-1 min-w-0"
+                      >
+                        <div className="w-12 h-12 rounded overflow-hidden bg-gray-800 shrink-0 flex items-center justify-center relative">
+                          {item.thumbnail ? (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={item.thumbnail}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                              <span className="absolute inset-0 flex items-center justify-center text-white/80 text-xs bg-black/20">▶</span>
+                            </>
+                          ) : (
+                            <span className="text-white text-xs">▶</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
+                            {item.title}
+                          </p>
+                          {item.date && (
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          )}
+                          {(!item.thumbnail || !item.date) && editingId !== item.id && (
+                            <p className="text-xs text-gray-300 mt-0.5">missing details</p>
+                          )}
+                        </div>
+                      </a>
+                      <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => editingId === item.id ? closeEdit() : openEdit(item)}
+                          className="text-xs text-gray-400 hover:text-yellow-600"
+                        >
+                          {editingId === item.id ? 'Cancel' : 'Edit'}
+                        </button>
+                        <button
+                          onClick={() => remove(item.id)}
+                          className="text-gray-300 hover:text-red-400 text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+
+                    {editingId === item.id && (
+                      <div className="px-2.5 pb-2.5 pt-1 border-t border-gray-100 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400 w-16 shrink-0">Thumbnail</span>
+                          <div className="flex items-center gap-2">
+                            {item.thumbnail && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={item.thumbnail} alt="" className="w-8 h-8 rounded object-cover bg-gray-200" />
+                            )}
+                            <button
+                              onClick={() => thumbRef.current?.click()}
+                              disabled={editSaving}
+                              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-yellow-600 disabled:opacity-40"
+                            >
+                              {item.thumbnail ? 'Replace' : 'Upload image'}
+                            </button>
+                            <input
+                              ref={thumbRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => handleThumbUpload(item.id, e)}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400 w-16 shrink-0">Date</span>
+                          <input
+                            type="date"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                            className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-yellow-400 flex-1"
+                          />
+                          <button
+                            onClick={() => saveDate(item.id)}
+                            disabled={editSaving}
+                            className="text-xs bg-gray-900 text-white px-2.5 py-1 rounded hover:bg-gray-700 disabled:opacity-40"
+                          >
+                            {editSaving ? '…' : 'Save'}
+                          </button>
+                        </div>
                       </div>
                     )}
-                  </button>
-                  <button onClick={() => setLightbox(item)} className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left">
-                    {item.originalName}
-                  </button>
-                  <button onClick={() => remove(item.id)} className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs shrink-0">✕</button>
-                </div>
+                  </>
+                )}
               </div>
             ))}
             {items.length > 1 && (
-              <button onClick={() => setShowAll((s) => !s)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5">
+              <button
+                onClick={() => setShowAll((s) => !s)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
+              >
                 {showAll ? '▲ Show less' : `▼ ${items.length - 1} more`}
               </button>
             )}
