@@ -340,7 +340,7 @@ function MediaSection({ slug }: { slug: string }) {
     const res = await fetch(`/api/media/${slug}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, date: editDate ? new Date(editDate).toISOString() : null }),
+      body: JSON.stringify({ id, date: editDate ? new Date(editDate + 'T12:00:00').toISOString() : null }),
     });
     const updated = await res.json();
     setItems((prev) => prev.map((i) => i.id === id ? { ...i, date: updated.date } : i));
@@ -627,7 +627,7 @@ function PressSection({ slug }: { slug: string }) {
     const res = await fetch(`/api/press/${slug}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, date: editDate ? new Date(editDate).toISOString() : null }),
+      body: JSON.stringify({ id, date: editDate ? new Date(editDate + 'T12:00:00').toISOString() : null }),
     });
     const updated = await res.json();
     setLinks((prev) => prev.map((l) => l.id === id ? { ...l, date: updated.date } : l));
