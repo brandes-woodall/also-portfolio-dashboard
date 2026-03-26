@@ -152,28 +152,15 @@ function EmailModal({ email, onClose }: { email: Email; onClose: () => void }) {
 
 // ── EmailSection ──────────────────────────────────────────────────────────────
 function EmailSection({ slug }: { slug: string }) {
-  const [emails, setEmails]     = useState<Email[]>([]);
-  const [loaded, setLoaded]     = useState(false);
-  const [isOpen, setIsOpen]     = useState(false);
-  const [loading, setLoading]   = useState(false);
+  const [emails, setEmails]       = useState<Email[]>([]);
+  const [showAll, setShowAll]     = useState(false);
   const [uploading, setUploading] = useState(false);
   const [openEmail, setOpenEmail] = useState<Email | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = async () => {
-    if (loaded) return;
-    setLoading(true);
-    const res  = await fetch(`/api/emails/${slug}`);
-    const data = await res.json();
-    setEmails(data);
-    setLoaded(true);
-    setLoading(false);
-  };
-
-  const toggle = () => {
-    if (!isOpen) load();
-    setIsOpen((o) => !o);
-  };
+  useEffect(() => {
+    fetch(`/api/emails/${slug}`).then(r => r.json()).then(setEmails);
+  }, [slug]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -184,22 +171,31 @@ function EmailSection({ slug }: { slug: string }) {
     const res   = await fetch(`/api/emails/${slug}`, { method: 'POST', body: form });
     const email = await res.json();
     setEmails((prev) => [email, ...prev]);
-    setLoaded(true);
-    setIsOpen(true);
     setUploading(false);
     e.target.value = '';
   };
 
+  const visible = showAll ? emails : emails.slice(0, 1);
+
+  const EmailRow = ({ email }: { email: Email }) => (
+    <button
+      key={email.id}
+      onClick={() => setOpenEmail(email)}
+      className="w-full text-left text-xs px-2.5 py-2 rounded-lg bg-gray-50 hover:bg-yellow-50 border border-transparent hover:border-yellow-200 transition-colors"
+    >
+      <p className="font-medium text-gray-700 truncate">{email.subject}</p>
+      <p className="text-gray-400 mt-0.5 truncate">
+        {email.from} ·{' '}
+        {new Date(email.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+      </p>
+    </button>
+  );
+
   return (
     <>
       <div>
-        <div className="flex items-center justify-between">
-          <button
-            onClick={toggle}
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            {isOpen ? '▲' : '▼'} Emails
-          </button>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-gray-400">Emails</span>
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
@@ -207,47 +203,27 @@ function EmailSection({ slug }: { slug: string }) {
           >
             {uploading ? 'Uploading…' : '↑ .eml'}
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".eml"
-            className="hidden"
-            onChange={handleFile}
-          />
+          <input ref={fileRef} type="file" accept=".eml" className="hidden" onChange={handleFile} />
         </div>
 
-        {isOpen && (
-          <div className="mt-1.5 space-y-1">
-            {loading ? (
-              <p className="text-xs text-gray-400 py-1">Loading…</p>
-            ) : emails.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">
-                No emails yet — upload a .eml file.
-              </p>
-            ) : (
-              emails.map((email) => (
-                <button
-                  key={email.id}
-                  onClick={() => setOpenEmail(email)}
-                  className="w-full text-left text-xs px-2.5 py-2 rounded-lg bg-gray-50 hover:bg-yellow-50 border border-transparent hover:border-yellow-200 transition-colors"
-                >
-                  <p className="font-medium text-gray-700 truncate">{email.subject}</p>
-                  <p className="text-gray-400 mt-0.5 truncate">
-                    {email.from} ·{' '}
-                    {new Date(email.date).toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric',
-                    })}
-                  </p>
-                </button>
-              ))
+        {emails.length === 0 ? (
+          <p className="text-xs text-gray-300 py-1">No emails yet</p>
+        ) : (
+          <div className="space-y-1">
+            {visible.map((email) => <EmailRow key={email.id} email={email} />)}
+            {emails.length > 1 && (
+              <button
+                onClick={() => setShowAll((s) => !s)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
+              >
+                {showAll ? '▲ Show less' : `▼ ${emails.length - 1} more`}
+              </button>
             )}
           </div>
         )}
       </div>
 
-      {openEmail && (
-        <EmailModal email={openEmail} onClose={() => setOpenEmail(null)} />
-      )}
+      {openEmail && <EmailModal email={openEmail} onClose={() => setOpenEmail(null)} />}
     </>
   );
 }
@@ -303,24 +279,14 @@ function MediaLightbox({ item, slug, onClose }: { item: MediaItem; slug: string;
 // ── MediaSection ──────────────────────────────────────────────────────────────
 function MediaSection({ slug }: { slug: string }) {
   const [items, setItems]         = useState<MediaItem[]>([]);
-  const [loaded, setLoaded]       = useState(false);
-  const [isOpen, setIsOpen]       = useState(false);
+  const [showAll, setShowAll]     = useState(false);
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox]   = useState<MediaItem | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = async () => {
-    if (loaded) return;
-    const res  = await fetch(`/api/media/${slug}`);
-    const data = await res.json();
-    setItems(data);
-    setLoaded(true);
-  };
-
-  const toggle = () => {
-    if (!isOpen) load();
-    setIsOpen((o) => !o);
-  };
+  useEffect(() => {
+    fetch(`/api/media/${slug}`).then(r => r.json()).then(setItems);
+  }, [slug]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -330,11 +296,7 @@ function MediaSection({ slug }: { slug: string }) {
     form.append('file', file);
     const res  = await fetch(`/api/media/${slug}`, { method: 'POST', body: form });
     const item = await res.json();
-    if (!item.error) {
-      setItems((prev) => [item, ...prev]);
-      setLoaded(true);
-      setIsOpen(true);
-    }
+    if (!item.error) setItems((prev) => [item, ...prev]);
     setUploading(false);
     e.target.value = '';
   };
@@ -344,16 +306,13 @@ function MediaSection({ slug }: { slug: string }) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
+  const visible = showAll ? items : items.slice(0, 1);
+
   return (
     <>
       <div>
-        <div className="flex items-center justify-between">
-          <button
-            onClick={toggle}
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            {isOpen ? '▲' : '▼'} Media
-          </button>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-gray-400">Media</span>
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
@@ -361,57 +320,37 @@ function MediaSection({ slug }: { slug: string }) {
           >
             {uploading ? 'Uploading…' : '↑ Image / Video'}
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*,video/*"
-            className="hidden"
-            onChange={handleFile}
-          />
+          <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFile} />
         </div>
 
-        {isOpen && (
-          <div className="mt-1.5">
-            {items.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1">No media yet — upload an image or video.</p>
-            ) : (
-              <div className="space-y-1">
-                {items.map((item) => (
-                  <div key={item.id} className="rounded-lg bg-gray-50 group border border-transparent hover:border-yellow-200 transition-colors">
-                    <div className="flex items-center gap-2.5 p-2">
-                      <button
-                        onClick={() => setLightbox(item)}
-                        className="w-10 h-10 rounded overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity"
-                      >
-                        {item.type === 'image' ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={`/api/media-files/${slug}/${item.filename}`}
-                            alt={item.originalName}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                            <span className="text-white text-xs">▶</span>
-                          </div>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => setLightbox(item)}
-                        className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left"
-                      >
-                        {item.originalName}
-                      </button>
-                      <button
-                        onClick={() => remove(item.id)}
-                        className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs shrink-0"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
+        {items.length === 0 ? (
+          <p className="text-xs text-gray-300 py-1">No media yet</p>
+        ) : (
+          <div className="space-y-1">
+            {visible.map((item) => (
+              <div key={item.id} className="rounded-lg bg-gray-50 group border border-transparent hover:border-yellow-200 transition-colors">
+                <div className="flex items-center gap-2.5 p-2">
+                  <button onClick={() => setLightbox(item)} className="w-10 h-10 rounded overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity">
+                    {item.type === 'image' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`/api/media-files/${slug}/${item.filename}`} alt={item.originalName} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                        <span className="text-white text-xs">▶</span>
+                      </div>
+                    )}
+                  </button>
+                  <button onClick={() => setLightbox(item)} className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left">
+                    {item.originalName}
+                  </button>
+                  <button onClick={() => remove(item.id)} className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs shrink-0">✕</button>
+                </div>
               </div>
+            ))}
+            {items.length > 1 && (
+              <button onClick={() => setShowAll((s) => !s)} className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5">
+                {showAll ? '▲ Show less' : `▼ ${items.length - 1} more`}
+              </button>
             )}
           </div>
         )}
@@ -426,30 +365,20 @@ function MediaSection({ slug }: { slug: string }) {
 
 // ── PressSection ──────────────────────────────────────────────────────────────
 function PressSection({ slug }: { slug: string }) {
-  const [links, setLinks]         = useState<PressLink[]>([]);
-  const [loaded, setLoaded]       = useState(false);
-  const [isOpen, setIsOpen]       = useState(false);
-  const [adding, setAdding]       = useState(false);
-  const [url, setUrl]             = useState('');
-  const [title, setTitle]         = useState('');
-  const [saving, setSaving]       = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDate, setEditDate]   = useState('');
+  const [links, setLinks]           = useState<PressLink[]>([]);
+  const [showAll, setShowAll]       = useState(false);
+  const [adding, setAdding]         = useState(false);
+  const [url, setUrl]               = useState('');
+  const [title, setTitle]           = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [editDate, setEditDate]     = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const thumbRef = useRef<HTMLInputElement>(null);
 
-  const load = async () => {
-    if (loaded) return;
-    const res  = await fetch(`/api/press/${slug}`);
-    const data = await res.json();
-    setLinks(data);
-    setLoaded(true);
-  };
-
-  const toggle = () => {
-    if (!isOpen) load();
-    setIsOpen((o) => !o);
-  };
+  useEffect(() => {
+    fetch(`/api/press/${slug}`).then((r) => r.json()).then(setLinks);
+  }, [slug]);
 
   const save = async () => {
     if (!url.trim()) return;
@@ -461,12 +390,10 @@ function PressSection({ slug }: { slug: string }) {
     });
     const link = await res.json();
     setLinks((prev) => [link, ...prev]);
-    setLoaded(true);
     setUrl('');
     setTitle('');
     setAdding(false);
     setSaving(false);
-    setIsOpen(true);
   };
 
   const remove = async (id: string) => {
@@ -507,20 +434,14 @@ function PressSection({ slug }: { slug: string }) {
     e.target.value = '';
   };
 
+  const visibleLinks = showAll ? links : links.slice(0, 1);
+
   return (
     <div>
       <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">Press</span>
         <button
-          onClick={toggle}
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          {isOpen ? '▲' : '▼'} Press
-        </button>
-        <button
-          onClick={() => {
-            setAdding((a) => !a);
-            if (!isOpen) { load(); setIsOpen(true); }
-          }}
+          onClick={() => setAdding((a) => !a)}
           className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
         >
           {adding ? 'Cancel' : '+ Link'}
@@ -556,16 +477,15 @@ function PressSection({ slug }: { slug: string }) {
         </div>
       )}
 
-      {isOpen && (
-        <div className="mt-1.5 space-y-1">
-          {links.length === 0 && !adding ? (
-            <p className="text-xs text-gray-400 py-1">No press links yet.</p>
-          ) : (
-            links.map((link) => (
-              <div
-                key={link.id}
-                className="rounded-lg bg-gray-50 group overflow-hidden border border-transparent hover:border-yellow-200 transition-colors"
-              >
+      <div className="mt-1.5 space-y-1">
+        {links.length === 0 && !adding ? (
+          <p className="text-xs text-gray-400 py-1">No press links yet.</p>
+        ) : (
+          visibleLinks.map((link) => (
+            <div
+              key={link.id}
+              className="rounded-lg bg-gray-50 group overflow-hidden border border-transparent hover:border-yellow-200 transition-colors"
+            >
                 {/* Link row */}
                 <div className="flex items-start gap-2.5 p-2.5">
                   <a
@@ -659,11 +579,18 @@ function PressSection({ slug }: { slug: string }) {
                     </div>
                   </div>
                 )}
-              </div>
-            ))
-          )}
-        </div>
-      )}
+            </div>
+          ))
+        )}
+        {links.length > 1 && (
+          <button
+            onClick={() => setShowAll((s) => !s)}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
+          >
+            {showAll ? '▲ Show less' : `▼ ${links.length - 1} more`}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
