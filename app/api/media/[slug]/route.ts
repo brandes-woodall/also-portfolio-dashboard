@@ -55,6 +55,14 @@ export async function POST(
     return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   }
 
+  const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json(
+      { error: 'File too large — 500 MB max' },
+      { status: 413 }
+    );
+  }
+
   const mimeType = file.type;
   const isImage = ACCEPTED_IMAGE_TYPES.includes(mimeType);
   const isVideo = ACCEPTED_VIDEO_TYPES.includes(mimeType) || file.name.match(/\.(mp4|mov|webm|avi|mkv)$/i);

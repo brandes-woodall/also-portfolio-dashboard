@@ -31,7 +31,7 @@ export async function GET(
   }
 }
 
-// POST /api/emails/[slug] — upload a .eml file, parse it, and save metadata + attachments
+// POST /api/emails/[slug] — upload a .eml file, parse it, and save metadata
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -45,38 +45,20 @@ export async function POST(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parsed = await simpleParser(buffer);
+  const parsed = await simpleParser(buffer, { skipHtmlToText: true });
 
   const emailId = Date.now().toString();
-  let htmlBody = parsed.html || '';
 
-  // Extract and save embedded (CID) images so they load in the HTML view
-  if (parsed.attachments && parsed.attachments.length > 0) {
-    const attachmentDir = path.join(DATA_DIR, slug, `${emailId}-attachments`);
-    await fs.mkdir(attachmentDir, { recursive: true });
-
-    for (const attachment of parsed.attachments) {
-      if (attachment.cid && attachment.content) {
-        // Sanitise the CID into a safe filename
-        const safeName = attachment.cid.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-        await fs.writeFile(path.join(attachmentDir, safeName), attachment.content);
-
-        // Rewrite cid: references in the HTML so the browser can load them
-        const escaped = attachment.cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        htmlBody = htmlBody.replace(
-          new RegExp(`cid:${escaped}`, 'gi'),
-          `/api/email-attachments/${slug}/${emailId}/${safeName}`
-        );
-      }
-    }
-  }
+  // Strip unresolvable cid: image references from the HTML so they don't show
+  // as broken image icons — external images (https://) will still load fine
+  const htmlBody = (parsed.html || '').replace(/<img[^>]+src=["']cid:[^"']+["'][^>]*\/?>/gi, '');
 
   const emailData = {
     id:       emailId,
-    subject:  parsed.subject  || '(No subject)',
+    subject:  parsed.subject || '(No subject)',
     from:     parsed.from?.text || '',
     date:     parsed.date?.toISOString() || new Date().toISOString(),
-    textBody: parsed.text  || '',
+    textBody: parsed.text || '',
     htmlBody,
     filename: file.name,
   };
@@ -104,11 +86,8 @@ export async function DELETE(
   }
 
   const file = path.join(DATA_DIR, slug, `${id}.json`);
-  const attachmentDir = path.join(DATA_DIR, slug, `${id}-attachments`);
   try {
     await fs.unlink(file);
-    // Clean up attachments if they exist
-    await fs.rm(attachmentDir, { recursive: true, force: true });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });

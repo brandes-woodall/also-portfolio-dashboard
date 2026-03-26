@@ -198,7 +198,7 @@ function EmailSection({ slug }: { slug: string }) {
             onClick={toggle}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
-            {isOpen ? '▲' : '▼'} Emails{loaded ? ` (${emails.length})` : ''}
+            {isOpen ? '▲' : '▼'} Emails
           </button>
           <button
             onClick={() => fileRef.current?.click()}
@@ -352,7 +352,7 @@ function MediaSection({ slug }: { slug: string }) {
             onClick={toggle}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
           >
-            {isOpen ? '▲' : '▼'} Media{loaded ? ` (${items.length})` : ''}
+            {isOpen ? '▲' : '▼'} Media
           </button>
           <button
             onClick={() => fileRef.current?.click()}
@@ -375,35 +375,40 @@ function MediaSection({ slug }: { slug: string }) {
             {items.length === 0 ? (
               <p className="text-xs text-gray-400 py-1">No media yet — upload an image or video.</p>
             ) : (
-              <div className="grid grid-cols-3 gap-1.5 mt-1">
+              <div className="space-y-1">
                 {items.map((item) => (
-                  <div key={item.id} className="relative group aspect-square">
-                    <button
-                      onClick={() => setLightbox(item)}
-                      className="w-full h-full rounded-lg overflow-hidden bg-gray-100 border border-transparent hover:border-yellow-300 transition-colors"
-                    >
-                      {item.type === 'image' ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`/api/media-files/${slug}/${item.filename}`}
-                          alt={item.originalName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gray-800 rounded-lg">
-                          <span className="text-2xl text-white">▶</span>
-                          <span className="text-white/60 text-xs mt-1 px-1 truncate w-full text-center">
-                            {item.originalName}
-                          </span>
-                        </div>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => remove(item.id)}
-                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                    >
-                      ×
-                    </button>
+                  <div key={item.id} className="rounded-lg bg-gray-50 group border border-transparent hover:border-yellow-200 transition-colors">
+                    <div className="flex items-center gap-2.5 p-2">
+                      <button
+                        onClick={() => setLightbox(item)}
+                        className="w-10 h-10 rounded overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity"
+                      >
+                        {item.type === 'image' ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`/api/media-files/${slug}/${item.filename}`}
+                            alt={item.originalName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                            <span className="text-white text-xs">▶</span>
+                          </div>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setLightbox(item)}
+                        className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left"
+                      >
+                        {item.originalName}
+                      </button>
+                      <button
+                        onClick={() => remove(item.id)}
+                        className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -421,13 +426,17 @@ function MediaSection({ slug }: { slug: string }) {
 
 // ── PressSection ──────────────────────────────────────────────────────────────
 function PressSection({ slug }: { slug: string }) {
-  const [links, setLinks]   = useState<PressLink[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [url, setUrl]       = useState('');
-  const [title, setTitle]   = useState('');
-  const [saving, setSaving] = useState(false);
+  const [links, setLinks]         = useState<PressLink[]>([]);
+  const [loaded, setLoaded]       = useState(false);
+  const [isOpen, setIsOpen]       = useState(false);
+  const [adding, setAdding]       = useState(false);
+  const [url, setUrl]             = useState('');
+  const [title, setTitle]         = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate]   = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const thumbRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     if (loaded) return;
@@ -465,6 +474,39 @@ function PressSection({ slug }: { slug: string }) {
     setLinks((prev) => prev.filter((l) => l.id !== id));
   };
 
+  const openEdit = (link: PressLink) => {
+    setEditingId(link.id);
+    setEditDate(link.date ? new Date(link.date).toISOString().split('T')[0] : '');
+  };
+
+  const closeEdit = () => { setEditingId(null); setEditDate(''); };
+
+  const saveDate = async (id: string) => {
+    setEditSaving(true);
+    const res = await fetch(`/api/press/${slug}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, date: editDate ? new Date(editDate).toISOString() : null }),
+    });
+    const updated = await res.json();
+    setLinks((prev) => prev.map((l) => l.id === id ? { ...l, date: updated.date } : l));
+    setEditSaving(false);
+    closeEdit();
+  };
+
+  const handleThumbUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditSaving(true);
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`/api/press-thumbs/${slug}/${id}`, { method: 'POST', body: form });
+    const { thumbnail } = await res.json();
+    setLinks((prev) => prev.map((l) => l.id === id ? { ...l, thumbnail } : l));
+    setEditSaving(false);
+    e.target.value = '';
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -472,7 +514,7 @@ function PressSection({ slug }: { slug: string }) {
           onClick={toggle}
           className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
         >
-          {isOpen ? '▲' : '▼'} Press{loaded ? ` (${links.length})` : ''}
+          {isOpen ? '▲' : '▼'} Press
         </button>
         <button
           onClick={() => {
@@ -524,40 +566,99 @@ function PressSection({ slug }: { slug: string }) {
                 key={link.id}
                 className="rounded-lg bg-gray-50 group overflow-hidden border border-transparent hover:border-yellow-200 transition-colors"
               >
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-start gap-2.5 p-2.5"
-                >
-                  {link.thumbnail && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={link.thumbnail}
-                      alt=""
-                      className="w-12 h-12 rounded object-cover shrink-0 bg-gray-200"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
-                      {link.title}
-                    </p>
-                    {link.date && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {new Date(link.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    )}
-                  </div>
-                </a>
-                <div className="flex justify-end px-2.5 pb-1.5 -mt-1">
-                  <button
-                    onClick={() => remove(link.id)}
-                    className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs"
+                {/* Link row */}
+                <div className="flex items-start gap-2.5 p-2.5">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-2.5 flex-1 min-w-0"
                   >
-                    ✕ Remove
-                  </button>
+                    {link.thumbnail && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={link.thumbnail}
+                        alt=""
+                        className="w-12 h-12 rounded object-cover shrink-0 bg-gray-200"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
+                        {link.title}
+                      </p>
+                      {link.date && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(link.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      )}
+                      {(!link.thumbnail || !link.date) && editingId !== link.id && (
+                        <p className="text-xs text-gray-300 mt-0.5">missing details</p>
+                      )}
+                    </div>
+                  </a>
+                  <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => editingId === link.id ? closeEdit() : openEdit(link)}
+                      className="text-xs text-gray-400 hover:text-yellow-600"
+                    >
+                      {editingId === link.id ? 'Cancel' : 'Edit'}
+                    </button>
+                    <button
+                      onClick={() => remove(link.id)}
+                      className="text-gray-300 hover:text-red-400 text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
+
+                {/* Inline edit form */}
+                {editingId === link.id && (
+                  <div className="px-2.5 pb-2.5 pt-1 border-t border-gray-100 space-y-2">
+                    {/* Thumbnail */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 w-16 shrink-0">Thumbnail</span>
+                      <div className="flex items-center gap-2">
+                        {link.thumbnail && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={link.thumbnail} alt="" className="w-8 h-8 rounded object-cover bg-gray-200" />
+                        )}
+                        <button
+                          onClick={() => thumbRef.current?.click()}
+                          disabled={editSaving}
+                          className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-yellow-600 disabled:opacity-40"
+                        >
+                          {link.thumbnail ? 'Replace' : 'Upload image'}
+                        </button>
+                        <input
+                          ref={thumbRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleThumbUpload(link.id, e)}
+                        />
+                      </div>
+                    </div>
+                    {/* Date */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 w-16 shrink-0">Date</span>
+                      <input
+                        type="date"
+                        value={editDate}
+                        onChange={(e) => setEditDate(e.target.value)}
+                        className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-yellow-400 flex-1"
+                      />
+                      <button
+                        onClick={() => saveDate(link.id)}
+                        disabled={editSaving}
+                        className="text-xs bg-gray-900 text-white px-2.5 py-1 rounded hover:bg-gray-700 disabled:opacity-40"
+                      >
+                        {editSaving ? '…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}

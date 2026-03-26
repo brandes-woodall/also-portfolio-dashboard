@@ -108,23 +108,68 @@ export async function POST(
     return NextResponse.json({ error: 'url is required' }, { status: 400 });
   }
 
-  // Fetch OG metadata from the article
-  const { title: ogTitle, date, thumbnail } = await fetchOGMeta(url.trim());
-
+  const id = Date.now().toString();
   const newLink: PressLink = {
-    id:        Date.now().toString(),
+    id,
     url:       url.trim(),
-    title:     manualTitle?.trim() || ogTitle || url.trim(),
-    date,
-    thumbnail,
+    title:     manualTitle?.trim() || url.trim(),
+    date:      null,
+    thumbnail: null,
     addedAt:   new Date().toISOString(),
   };
 
+  // Save immediately so the UI responds instantly
   const links = await readLinks(slug);
   links.unshift(newLink);
   await writeLinks(slug, links);
 
+  // Enrich with OG metadata in the background (non-blocking)
+  fetchOGMeta(url.trim()).then(async ({ title: ogTitle, date, thumbnail }) => {
+    try {
+      const current = await readLinks(slug);
+      const idx = current.findIndex((l) => l.id === id);
+      if (idx !== -1) {
+        current[idx] = {
+          ...current[idx],
+          title:     manualTitle?.trim() || ogTitle || url.trim(),
+          date,
+          thumbnail,
+        };
+        await writeLinks(slug, current);
+      }
+    } catch { /* best-effort */ }
+  });
+
   return NextResponse.json(newLink);
+}
+
+// PATCH /api/press/[slug] — update date and/or thumbnail for a link
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await params;
+  const { id, date, thumbnail } = await request.json() as {
+    id: string;
+    date?: string | null;
+    thumbnail?: string | null;
+  };
+
+  if (!id) {
+    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  }
+
+  const links = await readLinks(slug);
+  const idx   = links.findIndex((l) => l.id === id);
+  if (idx === -1) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  if (date !== undefined)      links[idx].date      = date ?? null;
+  if (thumbnail !== undefined) links[idx].thumbnail = thumbnail ?? null;
+
+  await writeLinks(slug, links);
+  return NextResponse.json(links[idx]);
 }
 
 // DELETE /api/press/[slug]?id=...
