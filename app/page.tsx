@@ -1,880 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
-
-interface Company {
-  name: string;
-  foundingTeam: string;
-  linkedin: string;
-  emails: string;
-  website: string;
-  fund: string;
-  category: string;
-  ac2Investment: number;
-  ac2Shares: number;
-  ac3Investment: number;
-  ac3Shares: number;
-  catalystInvestment: number;
-  catalystShares: number;
-  pricePerShare: number;
-  sharesOutstanding: number;
-  ac2SafeCap: number;
-  ac3SafeCap: number;
-  catalystSafeCap: number;
-}
-
-interface Email {
-  id: string;
-  subject: string;
-  from: string;
-  date: string;
-  textBody: string;
-  htmlBody: string;
-  filename: string;
-}
-
-interface PressLink {
-  id: string;
-  url: string;
-  title: string;
-  date: string | null;
-  thumbnail: string | null;
-  addedAt: string;
-}
-
-// ── Formatters ────────────────────────────────────────────────────────────────
-const fmtUSD = (n: number) =>
-  n >= 1_000_000
-    ? `$${(n / 1_000_000).toFixed(2)}M`
-    : n >= 1_000
-    ? `$${(n / 1_000).toFixed(0)}K`
-    : `$${n.toFixed(0)}`;
-
-const fmtUSDFull = (n: number) =>
-  '$' + Math.round(n).toLocaleString('en-US');
-
-const fmtPct  = (n: number) => `${(n * 100).toFixed(1)}%`;
-const fmtMOIC = (n: number) => `${n.toFixed(1)}x`;
-
-const toSlug = (name: string) =>
-  name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-
-// ── SAFE helpers ──────────────────────────────────────────────────────────────
-const isSafe = (shares: number, safeCap: number) => shares === 0 && safeCap > 0;
-
-const getCurrentValue = (
-  investment: number,
-  shares: number,
-  safeCap: number,
-  pricePerShare: number
-): number => {
-  if (!investment) return 0;
-  if (isSafe(shares, safeCap)) return investment;
-  if (!shares || !pricePerShare) return 0;
-  return shares * pricePerShare;
-};
-
-const getOwnership = (
-  investment: number,
-  shares: number,
-  safeCap: number,
-  sharesOutstanding: number
-): number => {
-  if (!investment) return 0;
-  if (isSafe(shares, safeCap)) return safeCap > 0 ? investment / safeCap : 0;
-  if (!shares || !sharesOutstanding) return 0;
-  return shares / sharesOutstanding;
-};
-
-const getMOIC = (
-  investment: number,
-  shares: number,
-  safeCap: number,
-  pricePerShare: number
-): number => {
-  if (!investment) return 0;
-  if (isSafe(shares, safeCap)) return 1.0;
-  if (!shares || !pricePerShare) return 0;
-  return (shares * pricePerShare) / investment;
-};
-
-// ── EmailModal ────────────────────────────────────────────────────────────────
-function EmailModal({ email, onClose }: { email: Email; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-4">
-          <div>
-            <h3 className="font-semibold text-gray-900">{email.subject}</h3>
-            <p className="text-xs text-gray-400 mt-1">From: {email.from}</p>
-            <p className="text-xs text-gray-400">
-              {new Date(email.date).toLocaleString('en-US', {
-                month: 'long', day: 'numeric', year: 'numeric',
-                hour: 'numeric', minute: '2-digit',
-              })}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none shrink-0"
-          >
-            ×
-          </button>
-        </div>
-        <div className="overflow-y-auto flex-1">
-          {email.htmlBody ? (
-            <iframe
-              srcDoc={email.htmlBody}
-              sandbox="allow-same-origin"
-              className="w-full border-0 rounded-b-2xl"
-              style={{ minHeight: '400px', height: '60vh' }}
-              title={email.subject}
-            />
-          ) : (
-            <div className="p-5">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
-                {email.textBody || '(No body)'}
-              </pre>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── EmailSection ──────────────────────────────────────────────────────────────
-function EmailSection({ slug }: { slug: string }) {
-  const [emails, setEmails]       = useState<Email[]>([]);
-  const [showAll, setShowAll]     = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [openEmail, setOpenEmail] = useState<Email | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch(`/api/emails/${slug}`).then(r => r.json()).then(setEmails);
-  }, [slug]);
-
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    const res   = await fetch(`/api/emails/${slug}`, { method: 'POST', body: form });
-    const email = await res.json();
-    setEmails((prev) => [email, ...prev]);
-    setUploading(false);
-    e.target.value = '';
-  };
-
-  const visible = showAll ? emails : emails.slice(0, 3);
-
-  const EmailRow = ({ email }: { email: Email }) => (
-    <button
-      key={email.id}
-      onClick={() => setOpenEmail(email)}
-      className="w-full text-left text-xs px-2.5 py-2 rounded-lg bg-gray-50 hover:bg-yellow-50 border border-transparent hover:border-yellow-200 transition-colors"
-    >
-      <p className="font-medium text-gray-700 truncate">{email.subject}</p>
-      <p className="text-gray-400 mt-0.5 truncate">
-        {email.from} ·{' '}
-        {new Date(email.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-      </p>
-    </button>
-  );
-
-  return (
-    <>
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs text-gray-400">Emails</span>
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
-          >
-            {uploading ? 'Uploading…' : '↑ .eml'}
-          </button>
-          <input ref={fileRef} type="file" accept=".eml" className="hidden" onChange={handleFile} />
-        </div>
-
-        {emails.length === 0 ? (
-          <p className="text-xs text-gray-300 py-1">No emails yet</p>
-        ) : (
-          <div className="space-y-1">
-            {visible.map((email) => <EmailRow key={email.id} email={email} />)}
-            {emails.length > 3 && (
-              <button
-                onClick={() => setShowAll((s) => !s)}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
-              >
-                {showAll ? '▲ Show less' : `▼ ${emails.length - 3} more`}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {openEmail && <EmailModal email={openEmail} onClose={() => setOpenEmail(null)} />}
-    </>
-  );
-}
-
-// ── Video embed helpers ────────────────────────────────────────────────────────
-function getEmbedUrl(url: string): string | null {
-  // YouTube
-  const ytPatterns = [
-    /youtube\.com\/watch\?(?:.*&)?v=([a-zA-Z0-9_-]{11})/,
-    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const re of ytPatterns) {
-    const m = url.match(re);
-    if (m) return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
-  }
-  // Box  — share links: app.box.com/s/HASH or company.box.com/s/HASH
-  const boxMatch = url.match(/box\.com\/s\/([a-zA-Z0-9]+)/);
-  if (boxMatch) return `https://app.box.com/embed/preview/${boxMatch[1]}?direction=ASC&theme=dark`;
-  // Google Drive — drive.google.com/file/d/FILE_ID/view
-  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (driveMatch) return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
-
-  return null;
-}
-
-function VideoModal({ title, embedUrl, onClose }: { title: string; embedUrl: string; onClose: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-4xl flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-2 px-1">
-          <p className="text-white/60 text-xs truncate flex-1 mr-4">{title}</p>
-          <button
-            onClick={onClose}
-            className="text-white/60 hover:text-white text-2xl leading-none shrink-0"
-          >
-            ×
-          </button>
-        </div>
-        <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-          <iframe
-            src={embedUrl}
-            className="absolute inset-0 w-full h-full rounded-xl"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── MediaLightbox ─────────────────────────────────────────────────────────────
-interface MediaItem {
-  id: string;
-  type: 'image' | 'video-link';
-  // image fields
-  filename?: string;
-  originalName?: string;
-  mimeType?: string;
-  // video-link fields
-  url?: string;
-  title?: string;
-  thumbnail?: string | null;
-  date?: string | null;
-  // common
-  uploadedAt: string;
-}
-
-function MediaLightbox({ item, slug, onClose }: { item: MediaItem; slug: string; onClose: () => void }) {
-  const src = `/api/media-files/${slug}/${item.filename}`;
-  return (
-    <div
-      className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute -top-8 right-0 text-white/70 hover:text-white text-2xl leading-none"
-        >
-          ×
-        </button>
-        <p className="text-white/50 text-xs mb-2 truncate max-w-full">{item.originalName}</p>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={item.originalName}
-          className="max-h-[80vh] max-w-full rounded-xl object-contain"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ── MediaSection ──────────────────────────────────────────────────────────────
-function MediaSection({ slug }: { slug: string }) {
-  const [items, setItems]           = useState<MediaItem[]>([]);
-  const [showAll, setShowAll]       = useState(false);
-  const [addMode, setAddMode]       = useState<'none' | 'link' | 'image'>('none');
-  const [url, setUrl]               = useState('');
-  const [title, setTitle]           = useState('');
-  const [saving, setSaving]         = useState(false);
-  const [uploading, setUploading]   = useState(false);
-  const [lightbox, setLightbox]     = useState<MediaItem | null>(null);
-  const [videoModal, setVideoModal] = useState<MediaItem | null>(null);
-  const [editingId, setEditingId]   = useState<string | null>(null);
-  const [editDate, setEditDate]     = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const fileRef  = useRef<HTMLInputElement>(null);
-  const thumbRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch(`/api/media/${slug}`).then((r) => r.json()).then(setItems);
-  }, [slug]);
-
-  const saveLink = async () => {
-    if (!url.trim()) return;
-    setSaving(true);
-    const res  = await fetch(`/api/media/${slug}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: url.trim(), title: title.trim() || url.trim() }),
-    });
-    const item = await res.json();
-    setItems((prev) => [item, ...prev]);
-    setUrl('');
-    setTitle('');
-    setAddMode('none');
-    setSaving(false);
-  };
-
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
-    const res  = await fetch(`/api/media/${slug}`, { method: 'POST', body: form });
-    const item = await res.json();
-    if (!item.error) setItems((prev) => [item, ...prev]);
-    setUploading(false);
-    setAddMode('none');
-    e.target.value = '';
-  };
-
-  const remove = async (id: string) => {
-    await fetch(`/api/media/${slug}?id=${id}`, { method: 'DELETE' });
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  };
-
-  const openEdit = (item: MediaItem) => {
-    setEditingId(item.id);
-    setEditDate(item.date ? new Date(item.date).toISOString().split('T')[0] : '');
-  };
-  const closeEdit = () => { setEditingId(null); setEditDate(''); };
-
-  const saveDate = async (id: string) => {
-    setEditSaving(true);
-    const res = await fetch(`/api/media/${slug}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, date: editDate ? new Date(editDate + 'T12:00:00').toISOString() : null }),
-    });
-    const updated = await res.json();
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, date: updated.date } : i));
-    setEditSaving(false);
-    closeEdit();
-  };
-
-  const handleThumbUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setEditSaving(true);
-    const form = new FormData();
-    form.append('file', file);
-    // Reuse press-thumbs endpoint for simplicity
-    const res = await fetch(`/api/press-thumbs/${slug}/${id}`, { method: 'POST', body: form });
-    const { thumbnail } = await res.json();
-    // Save thumbnail via PATCH
-    await fetch(`/api/media/${slug}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, thumbnail }),
-    });
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, thumbnail } : i));
-    setEditSaving(false);
-    e.target.value = '';
-  };
-
-  const visible = showAll ? items : items.slice(0, 3);
-
-  return (
-    <>
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs text-gray-400">Media</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setAddMode((m) => m === 'link' ? 'none' : 'link')}
-              className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
-            >
-              {addMode === 'link' ? 'Cancel' : '+ Link'}
-            </button>
-            <button
-              onClick={() => { setAddMode('none'); fileRef.current?.click(); }}
-              disabled={uploading}
-              className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
-            >
-              {uploading ? 'Uploading…' : '↑ Image'}
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-          </div>
-        </div>
-
-        {addMode === 'link' && (
-          <div className="mb-1.5 space-y-1">
-            <input
-              type="url"
-              placeholder="https://youtube.com/watch?v=… or drive.google.com/…"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && saveLink()}
-              autoFocus
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
-            />
-            <input
-              type="text"
-              placeholder="Title (optional — auto-fetched)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && saveLink()}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
-            />
-            <button
-              onClick={saveLink}
-              disabled={!url.trim() || saving}
-              className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 disabled:opacity-40 transition-colors"
-            >
-              {saving ? 'Saving…' : 'Save link'}
-            </button>
-          </div>
-        )}
-
-        {items.length === 0 ? (
-          <p className="text-xs text-gray-300 py-1">No media yet</p>
-        ) : (
-          <div className="space-y-1">
-            {visible.map((item) => (
-              <div key={item.id} className="rounded-lg bg-gray-50 group overflow-hidden border border-transparent hover:border-yellow-200 transition-colors">
-                {item.type === 'image' ? (
-                  // ── Image row ───────────────────────────────────────────────
-                  <div className="flex items-center gap-2.5 p-2">
-                    <button
-                      onClick={() => setLightbox(item)}
-                      className="w-10 h-10 rounded overflow-hidden bg-gray-200 shrink-0 hover:opacity-80 transition-opacity"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/media-files/${slug}/${item.filename}`}
-                        alt={item.originalName}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                    <button
-                      onClick={() => setLightbox(item)}
-                      className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left"
-                    >
-                      {item.originalName}
-                    </button>
-                    <button
-                      onClick={() => remove(item.id)}
-                      className="text-gray-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 text-xs shrink-0"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  // ── Video link row ──────────────────────────────────────────
-                  <>
-                    <div className="flex items-start gap-2.5 p-2.5">
-                      <button
-                        onClick={() => {
-                          const embed = getEmbedUrl(item.url!);
-                          if (embed) setVideoModal(item);
-                          else window.open(item.url, '_blank', 'noopener,noreferrer');
-                        }}
-                        className="flex items-start gap-2.5 flex-1 min-w-0 text-left"
-                      >
-                        <div className="w-12 h-12 rounded overflow-hidden bg-gray-800 shrink-0 flex items-center justify-center relative">
-                          {item.thumbnail ? (
-                            <>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={item.thumbnail}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                              <span className="absolute inset-0 flex items-center justify-center text-white/80 text-xs bg-black/20">▶</span>
-                            </>
-                          ) : (
-                            <span className="text-white text-xs">▶</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
-                            {item.title}
-                          </p>
-                          {item.date && (
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                          )}
-                          {(!item.thumbnail || !item.date) && editingId !== item.id && (
-                            <p className="text-xs text-gray-300 mt-0.5">missing details</p>
-                          )}
-                        </div>
-                      </button>
-                      <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => editingId === item.id ? closeEdit() : openEdit(item)}
-                          className="text-xs text-gray-400 hover:text-yellow-600"
-                        >
-                          {editingId === item.id ? 'Cancel' : 'Edit'}
-                        </button>
-                        <button
-                          onClick={() => remove(item.id)}
-                          className="text-gray-300 hover:text-red-400 text-xs"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-
-                    {editingId === item.id && (
-                      <div className="px-2.5 pb-2.5 pt-1 border-t border-gray-100 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400 w-16 shrink-0">Thumbnail</span>
-                          <div className="flex items-center gap-2">
-                            {item.thumbnail && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={item.thumbnail} alt="" className="w-8 h-8 rounded object-cover bg-gray-200" />
-                            )}
-                            <button
-                              onClick={() => thumbRef.current?.click()}
-                              disabled={editSaving}
-                              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-yellow-600 disabled:opacity-40"
-                            >
-                              {item.thumbnail ? 'Replace' : 'Upload image'}
-                            </button>
-                            <input
-                              ref={thumbRef}
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => handleThumbUpload(item.id, e)}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400 w-16 shrink-0">Date</span>
-                          <input
-                            type="date"
-                            value={editDate}
-                            onChange={(e) => setEditDate(e.target.value)}
-                            className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-yellow-400 flex-1"
-                          />
-                          <button
-                            onClick={() => saveDate(item.id)}
-                            disabled={editSaving}
-                            className="text-xs bg-gray-900 text-white px-2.5 py-1 rounded hover:bg-gray-700 disabled:opacity-40"
-                          >
-                            {editSaving ? '…' : 'Save'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-            {items.length > 3 && (
-              <button
-                onClick={() => setShowAll((s) => !s)}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
-              >
-                {showAll ? '▲ Show less' : `▼ ${items.length - 3} more`}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {lightbox && (
-        <MediaLightbox item={lightbox} slug={slug} onClose={() => setLightbox(null)} />
-      )}
-      {videoModal && (() => {
-        const embedUrl = getEmbedUrl(videoModal.url!);
-        return embedUrl ? (
-          <VideoModal
-            title={videoModal.title ?? ''}
-            embedUrl={embedUrl}
-            onClose={() => setVideoModal(null)}
-          />
-        ) : null;
-      })()}
-    </>
-  );
-}
-
-// ── PressSection ──────────────────────────────────────────────────────────────
-function PressSection({ slug }: { slug: string }) {
-  const [links, setLinks]           = useState<PressLink[]>([]);
-  const [showAll, setShowAll]       = useState(false);
-  const [adding, setAdding]         = useState(false);
-  const [url, setUrl]               = useState('');
-  const [title, setTitle]           = useState('');
-  const [saving, setSaving]         = useState(false);
-  const [editingId, setEditingId]   = useState<string | null>(null);
-  const [editDate, setEditDate]     = useState('');
-  const [editSaving, setEditSaving] = useState(false);
-  const thumbRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch(`/api/press/${slug}`).then((r) => r.json()).then(setLinks);
-  }, [slug]);
-
-  const save = async () => {
-    if (!url.trim()) return;
-    setSaving(true);
-    const res  = await fetch(`/api/press/${slug}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: url.trim(), title: title.trim() || url.trim() }),
-    });
-    const link = await res.json();
-    setLinks((prev) => [link, ...prev]);
-    setUrl('');
-    setTitle('');
-    setAdding(false);
-    setSaving(false);
-  };
-
-  const remove = async (id: string) => {
-    await fetch(`/api/press/${slug}?id=${id}`, { method: 'DELETE' });
-    setLinks((prev) => prev.filter((l) => l.id !== id));
-  };
-
-  const openEdit = (link: PressLink) => {
-    setEditingId(link.id);
-    setEditDate(link.date ? new Date(link.date).toISOString().split('T')[0] : '');
-  };
-
-  const closeEdit = () => { setEditingId(null); setEditDate(''); };
-
-  const saveDate = async (id: string) => {
-    setEditSaving(true);
-    const res = await fetch(`/api/press/${slug}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, date: editDate ? new Date(editDate + 'T12:00:00').toISOString() : null }),
-    });
-    const updated = await res.json();
-    setLinks((prev) => prev.map((l) => l.id === id ? { ...l, date: updated.date } : l));
-    setEditSaving(false);
-    closeEdit();
-  };
-
-  const handleThumbUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setEditSaving(true);
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`/api/press-thumbs/${slug}/${id}`, { method: 'POST', body: form });
-    const { thumbnail } = await res.json();
-    setLinks((prev) => prev.map((l) => l.id === id ? { ...l, thumbnail } : l));
-    setEditSaving(false);
-    e.target.value = '';
-  };
-
-  const visibleLinks = showAll ? links : links.slice(0, 3);
-
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">Press</span>
-        <button
-          onClick={() => setAdding((a) => !a)}
-          className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
-        >
-          {adding ? 'Cancel' : '+ Link'}
-        </button>
-      </div>
-
-      {adding && (
-        <div className="mt-1.5 space-y-1">
-          <input
-            type="url"
-            placeholder="https://techcrunch.com/…"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && save()}
-            autoFocus
-            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
-          />
-          <input
-            type="text"
-            placeholder="Title (optional)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && save()}
-            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
-          />
-          <button
-            onClick={save}
-            disabled={!url.trim() || saving}
-            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 disabled:opacity-40 transition-colors"
-          >
-            {saving ? 'Saving…' : 'Save link'}
-          </button>
-        </div>
-      )}
-
-      <div className="mt-1.5 space-y-1">
-        {links.length === 0 && !adding ? (
-          <p className="text-xs text-gray-400 py-1">No press links yet.</p>
-        ) : (
-          visibleLinks.map((link) => (
-            <div
-              key={link.id}
-              className="rounded-lg bg-gray-50 group overflow-hidden border border-transparent hover:border-yellow-200 transition-colors"
-            >
-                {/* Link row */}
-                <div className="flex items-start gap-2.5 p-2.5">
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start gap-2.5 flex-1 min-w-0"
-                  >
-                    {link.thumbnail && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={link.thumbnail}
-                        alt=""
-                        className="w-12 h-12 rounded object-cover shrink-0 bg-gray-200"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
-                        {link.title}
-                      </p>
-                      {link.date && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {new Date(link.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </p>
-                      )}
-                      {(!link.thumbnail || !link.date) && editingId !== link.id && (
-                        <p className="text-xs text-gray-300 mt-0.5">missing details</p>
-                      )}
-                    </div>
-                  </a>
-                  <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => editingId === link.id ? closeEdit() : openEdit(link)}
-                      className="text-xs text-gray-400 hover:text-yellow-600"
-                    >
-                      {editingId === link.id ? 'Cancel' : 'Edit'}
-                    </button>
-                    <button
-                      onClick={() => remove(link.id)}
-                      className="text-gray-300 hover:text-red-400 text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                {/* Inline edit form */}
-                {editingId === link.id && (
-                  <div className="px-2.5 pb-2.5 pt-1 border-t border-gray-100 space-y-2">
-                    {/* Thumbnail */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-16 shrink-0">Thumbnail</span>
-                      <div className="flex items-center gap-2">
-                        {link.thumbnail && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={link.thumbnail} alt="" className="w-8 h-8 rounded object-cover bg-gray-200" />
-                        )}
-                        <button
-                          onClick={() => thumbRef.current?.click()}
-                          disabled={editSaving}
-                          className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-yellow-600 disabled:opacity-40"
-                        >
-                          {link.thumbnail ? 'Replace' : 'Upload image'}
-                        </button>
-                        <input
-                          ref={thumbRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleThumbUpload(link.id, e)}
-                        />
-                      </div>
-                    </div>
-                    {/* Date */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-16 shrink-0">Date</span>
-                      <input
-                        type="date"
-                        value={editDate}
-                        onChange={(e) => setEditDate(e.target.value)}
-                        className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-yellow-400 flex-1"
-                      />
-                      <button
-                        onClick={() => saveDate(link.id)}
-                        disabled={editSaving}
-                        className="text-xs bg-gray-900 text-white px-2.5 py-1 rounded hover:bg-gray-700 disabled:opacity-40"
-                      >
-                        {editSaving ? '…' : 'Save'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-            </div>
-          ))
-        )}
-        {links.length > 3 && (
-          <button
-            onClick={() => setShowAll((s) => !s)}
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors pt-0.5"
-          >
-            {showAll ? '▲ Show less' : `▼ ${links.length - 3} more`}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+import Link from 'next/link';
+import {
+  Company,
+  fmtUSD, fmtUSDFull, fmtPct, fmtMOIC, toSlug,
+  isSafe, getCurrentValue, getOwnership, getMOIC,
+  AC2_FUND_SIZE, AC3_FUND_SIZE,
+} from './lib/portfolio';
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function Home() {
@@ -898,8 +32,6 @@ export default function Home() {
     });
 
   // ── Firm AUM ─────────────────────────────────────────────────────────────
-  const AC2_FUND_SIZE = 22_080_641;
-  const AC3_FUND_SIZE = 52_000_000;
   let ac2Invested = 0, ac2Value = 0;
   let ac3Invested = 0, ac3Value = 0;
   let catalystValue = 0;
@@ -1034,11 +166,8 @@ export default function Home() {
       {/* ── Company Grid ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((company) => {
-          const slug      = toSlug(company.name);
-          const founders  = company.foundingTeam.split(',').map((s) => s.trim()).filter(Boolean);
-          const linkedins = company.linkedin.split(',').map((s) => s.trim()).filter(Boolean);
-          const emails    = company.emails.split(',').map((s) => s.trim()).filter(Boolean);
-          const isOpen    = expanded.has(company.name);
+          const slug   = toSlug(company.name);
+          const isOpen = expanded.has(company.name);
 
           const funds = [
             { label: 'AC2',      investment: company.ac2Investment,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
@@ -1058,148 +187,116 @@ export default function Home() {
           return (
             <div
               key={company.name}
-              className="border border-gray-200 rounded-xl p-5 hover:border-yellow-500 hover:bg-[#fffef5] transition-all duration-150 flex flex-col"
+              className="border border-gray-200 rounded-xl hover:border-yellow-500 hover:bg-[#fffef5] transition-all duration-150 flex flex-col"
             >
-              {/* Card header */}
-              <div className="flex items-center gap-3 mb-4">
-                <a
-                  href={company.website ? (company.website.startsWith('http') ? company.website : `https://${company.website}`) : undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden hover:opacity-80 transition-opacity"
-                >
-                  <Image
-                    src={`/logos/${slug}.png`}
-                    alt={company.name}
-                    width={40}
-                    height={40}
-                    className="object-contain"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                </a>
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-semibold text-gray-900 truncate">{company.name}</h2>
-                  {company.website && (
-                    <a
-                      href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-gray-400 hover:text-gray-600 truncate block"
-                    >
-                      {company.website.replace(/^https?:\/\//, '')}
-                    </a>
+              {/* Clickable area → company detail page */}
+              <Link
+                href={`/company/${slug}`}
+                className="p-5 pb-3 flex flex-col flex-1"
+              >
+                {/* Card header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    <Image
+                      src={`/logos/${slug}.png`}
+                      alt={company.name}
+                      width={40}
+                      height={40}
+                      className="object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-semibold text-gray-900 truncate">{company.name}</h2>
+                    {company.website && (
+                      <p className="text-xs text-gray-400 truncate">
+                        {company.website.replace(/^https?:\/\//, '')}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-gray-300 text-sm shrink-0">→</span>
+                </div>
+
+                {/* Tags */}
+                <div className="flex gap-1.5 flex-wrap mb-4">
+                  {funds.map((f) => (
+                    <span key={f.label} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                      {f.label}
+                    </span>
+                  ))}
+                  {company.category && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
+                      {company.category}
+                    </span>
                   )}
                 </div>
-              </div>
 
-              {/* Tags */}
-              <div className="flex gap-1.5 flex-wrap mb-4">
-                {funds.map((f) => (
-                  <span key={f.label} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                    {f.label}
-                  </span>
-                ))}
-                {company.category && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
-                    {company.category}
-                  </span>
+                {/* Company-level summary stats */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-gray-400">Invested</p>
+                    <p className="text-sm font-medium text-gray-800">{fmtUSD(companyInvested)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Ownership</p>
+                    <p className="text-sm font-medium text-gray-800">{fmtPct(companyOwnership)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">MOIC</p>
+                    <p className="text-sm font-medium text-gray-800">{fmtMOIC(companyMOIC)}</p>
+                  </div>
+                </div>
+              </Link>
+
+              {/* Fund breakdown toggle (below the clickable area) */}
+              <div className="px-5 pb-4">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    toggleExpand(company.name);
+                  }}
+                  className="text-xs text-gray-400 hover:text-gray-600 text-left"
+                >
+                  {isOpen ? '▲ Hide' : '▼ Show'} fund breakdown
+                </button>
+
+                {isOpen && (
+                  <div className="space-y-2 mt-2">
+                    {funds.map((f) => {
+                      const safe      = isSafe(f.shares, f.safeCap);
+                      const value     = getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare);
+                      const ownership = getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding);
+                      const moic      = getMOIC(f.investment, f.shares, f.safeCap, company.pricePerShare);
+
+                      return (
+                        <div key={f.label} className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-gray-700">{f.label}</span>
+                            {safe && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium">
+                                SAFE
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <p className="text-xs text-gray-400">Invested</p>
+                              <p className="text-xs font-medium text-gray-700">{fmtUSD(f.investment)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-400">Ownership</p>
+                              <p className="text-xs font-medium text-gray-700">{fmtPct(ownership)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-400">MOIC</p>
+                              <p className="text-xs font-medium text-gray-700">{fmtMOIC(moic)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-              </div>
-
-              {/* Company-level summary stats */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                <div>
-                  <p className="text-xs text-gray-400">Invested</p>
-                  <p className="text-sm font-medium text-gray-800">{fmtUSD(companyInvested)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Ownership</p>
-                  <p className="text-sm font-medium text-gray-800">{fmtPct(companyOwnership)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">MOIC</p>
-                  <p className="text-sm font-medium text-gray-800">{fmtMOIC(companyMOIC)}</p>
-                </div>
-              </div>
-
-              {/* Fund breakdown */}
-              <button
-                onClick={() => toggleExpand(company.name)}
-                className="text-xs text-gray-400 hover:text-gray-600 mb-2 text-left"
-              >
-                {isOpen ? '▲ Hide' : '▼ Show'} fund breakdown
-              </button>
-
-              {isOpen && (
-                <div className="space-y-2 mb-3">
-                  {funds.map((f) => {
-                    const safe      = isSafe(f.shares, f.safeCap);
-                    const value     = getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare);
-                    const ownership = getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding);
-                    const moic      = getMOIC(f.investment, f.shares, f.safeCap, company.pricePerShare);
-
-                    return (
-                      <div key={f.label} className="bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-gray-700">{f.label}</span>
-                          {safe && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-500 font-medium">
-                              SAFE
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <p className="text-xs text-gray-400">Invested</p>
-                            <p className="text-xs font-medium text-gray-700">{fmtUSD(f.investment)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-400">Ownership</p>
-                            <p className="text-xs font-medium text-gray-700">{fmtPct(ownership)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-400">MOIC</p>
-                            <p className="text-xs font-medium text-gray-700">{fmtMOIC(moic)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Founder cards */}
-              {founders.length > 0 && (
-                <div className="border-t border-gray-100 pt-3 mt-auto space-y-2 mb-3">
-                  {founders.map((founder, i) => (
-                    <div key={i} className="flex items-start justify-between">
-                      <div>
-                        {linkedins[i] ? (
-                          <a
-                            href={linkedins[i].startsWith('http') ? linkedins[i] : `https://${linkedins[i]}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-gray-800 hover:text-yellow-600 hover:underline"
-                          >
-                            {founder}
-                          </a>
-                        ) : (
-                          <p className="text-sm font-medium text-gray-800">{founder}</p>
-                        )}
-                        {emails[i] && (
-                          <p className="text-xs text-gray-400">{emails[i]}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ── Press, Emails & Media ── */}
-              <div className={`border-t border-gray-100 pt-3 space-y-3 ${founders.length === 0 ? 'mt-auto' : ''}`}>
-                <PressSection slug={slug} />
-                <EmailSection slug={slug} />
-                <MediaSection slug={slug} />
               </div>
             </div>
           );
