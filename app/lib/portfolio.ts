@@ -29,6 +29,15 @@ export interface Email {
   textBody: string;
   htmlBody: string;
   filename: string;
+  isPdf?: boolean;
+  pdfFile?: string;
+}
+
+export interface BoxFolder {
+  id: string;
+  url: string;
+  title: string;
+  addedAt: string;
 }
 
 export interface PressLink {

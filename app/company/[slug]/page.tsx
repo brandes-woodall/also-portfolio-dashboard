@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
-  Company, Email, PressLink, MediaItem,
+  Company, Email, PressLink, MediaItem, BoxFolder,
   fmtUSD, fmtPct, fmtMOIC, toSlug,
   isSafe, getCurrentValue, getOwnership, getMOIC,
 } from '../../lib/portfolio';
@@ -29,7 +29,7 @@ function getEmbedUrl(url: string): string | null {
 }
 
 // ── EmailModal ───────────────────────────────────────────────────────────────
-function EmailModal({ email, onClose }: { email: Email; onClose: () => void }) {
+function EmailModal({ email, slug, onClose }: { email: Email; slug: string; onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
@@ -41,8 +41,11 @@ function EmailModal({ email, onClose }: { email: Email; onClose: () => void }) {
       >
         <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-4">
           <div>
-            <h3 className="font-semibold text-gray-900">{email.subject}</h3>
-            <p className="text-xs text-gray-400 mt-1">From: {email.from}</p>
+            <h3 className="font-semibold text-gray-900">
+              {email.isPdf && <span className="text-xs font-medium text-red-500 bg-red-50 px-1.5 py-0.5 rounded mr-2">PDF</span>}
+              {email.subject}
+            </h3>
+            {email.from && <p className="text-xs text-gray-400 mt-1">From: {email.from}</p>}
             <p className="text-xs text-gray-400">
               {new Date(email.date).toLocaleString('en-US', {
                 month: 'long', day: 'numeric', year: 'numeric',
@@ -58,7 +61,14 @@ function EmailModal({ email, onClose }: { email: Email; onClose: () => void }) {
           </button>
         </div>
         <div className="overflow-y-auto flex-1">
-          {email.htmlBody ? (
+          {email.isPdf && email.pdfFile ? (
+            <iframe
+              src={`/api/email-pdf/${slug}/${email.pdfFile}`}
+              className="w-full border-0 rounded-b-2xl"
+              style={{ minHeight: '400px', height: '60vh' }}
+              title={email.subject}
+            />
+          ) : email.htmlBody ? (
             <iframe
               srcDoc={email.htmlBody}
               sandbox="allow-same-origin"
@@ -112,9 +122,12 @@ function EmailSection({ slug }: { slug: string }) {
       onClick={() => setOpenEmail(email)}
       className="w-full text-left text-xs px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-yellow-50 border border-transparent hover:border-yellow-200 transition-colors"
     >
-      <p className="font-medium text-gray-700 truncate">{email.subject}</p>
+      <p className="font-medium text-gray-700 truncate">
+        {email.isPdf && <span className="text-xs font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mr-1.5">PDF</span>}
+        {email.subject}
+      </p>
       <p className="text-gray-400 mt-0.5 truncate">
-        {email.from} ·{' '}
+        {email.from ? `${email.from} · ` : ''}
         {new Date(email.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
       </p>
     </button>
@@ -130,9 +143,9 @@ function EmailSection({ slug }: { slug: string }) {
             disabled={uploading}
             className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
           >
-            {uploading ? 'Uploading…' : '↑ Upload .eml'}
+            {uploading ? 'Uploading…' : '↑ Upload .eml / .pdf'}
           </button>
-          <input ref={fileRef} type="file" accept=".eml" className="hidden" onChange={handleFile} />
+          <input ref={fileRef} type="file" accept=".eml,.pdf,application/pdf" className="hidden" onChange={handleFile} />
         </div>
 
         {emails.length === 0 ? (
@@ -152,8 +165,145 @@ function EmailSection({ slug }: { slug: string }) {
         )}
       </div>
 
-      {openEmail && <EmailModal email={openEmail} onClose={() => setOpenEmail(null)} />}
+      {openEmail && <EmailModal email={openEmail} slug={slug} onClose={() => setOpenEmail(null)} />}
     </>
+  );
+}
+
+// ── InvestmentMaterials (Box folder embeds) ──────────────────────────────────
+function getBoxEmbedUrl(url: string): string | null {
+  // app.box.com/s/HASH or *.box.com/s/HASH
+  const shareMatch = url.match(/box\.com\/s\/([a-zA-Z0-9]+)/);
+  if (shareMatch) return `https://app.box.com/embed/s/${shareMatch[1]}?sortColumn=date&view=list`;
+  // app.box.com/folder/ID
+  const folderMatch = url.match(/box\.com\/folder\/(\d+)/);
+  if (folderMatch) return `https://app.box.com/embed/folder/${folderMatch[1]}?sortColumn=date&view=list`;
+  return null;
+}
+
+function InvestmentMaterials({ slug }: { slug: string }) {
+  const [folders, setFolders] = useState<BoxFolder[]>([]);
+  const [adding, setAdding]   = useState(false);
+  const [url, setUrl]         = useState('');
+  const [title, setTitle]     = useState('');
+  const [saving, setSaving]   = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/box-folders/${slug}`).then((r) => r.json()).then(setFolders);
+  }, [slug]);
+
+  const save = async () => {
+    if (!url.trim()) return;
+    setSaving(true);
+    const res = await fetch(`/api/box-folders/${slug}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url.trim(), title: title.trim() || 'Investment Materials' }),
+    });
+    const folder = await res.json();
+    setFolders((prev) => [folder, ...prev]);
+    setUrl('');
+    setTitle('');
+    setAdding(false);
+    setSaving(false);
+  };
+
+  const remove = async (id: string) => {
+    await fetch(`/api/box-folders/${slug}?id=${id}`, { method: 'DELETE' });
+    setFolders((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-700">Investment Materials</h3>
+        <button
+          onClick={() => setAdding((a) => !a)}
+          className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
+        >
+          {adding ? 'Cancel' : '+ Box Folder'}
+        </button>
+      </div>
+
+      {adding && (
+        <div className="mb-3 space-y-1">
+          <input
+            type="url"
+            placeholder="https://app.box.com/s/… or https://app.box.com/folder/…"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && save()}
+            autoFocus
+            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
+          />
+          <input
+            type="text"
+            placeholder="Title (optional)"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && save()}
+            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-yellow-400"
+          />
+          <button
+            onClick={save}
+            disabled={!url.trim() || saving}
+            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 disabled:opacity-40 transition-colors"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
+
+      {folders.length === 0 && !adding ? (
+        <p className="text-xs text-gray-300 py-1">No folders linked yet.</p>
+      ) : (
+        <div className="space-y-4">
+          {folders.map((folder) => {
+            const embedUrl = getBoxEmbedUrl(folder.url);
+            return (
+              <div key={folder.id} className="group">
+                <div className="flex items-center justify-between mb-1.5">
+                  <a
+                    href={folder.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-medium text-gray-600 hover:text-yellow-600"
+                  >
+                    {folder.title}
+                  </a>
+                  <button
+                    onClick={() => remove(folder.id)}
+                    className="text-gray-300 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {embedUrl ? (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <iframe
+                      src={embedUrl}
+                      className="w-full border-0"
+                      style={{ height: '400px' }}
+                      sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                      title={folder.title}
+                    />
+                  </div>
+                ) : (
+                  <a
+                    href={folder.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-xs text-gray-400 bg-gray-50 rounded-xl p-4 text-center hover:bg-yellow-50 hover:text-yellow-600 transition-colors"
+                  >
+                    Open in Box →
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -955,7 +1105,7 @@ export default function CompanyPage() {
                       href={linkedins[i].startsWith('http') ? linkedins[i] : `https://${linkedins[i]}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-500 hover:text-blue-600 hover:underline"
+                      className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline"
                     >
                       LinkedIn
                     </a>
@@ -974,6 +1124,17 @@ export default function CompanyPage() {
           </div>
         </div>
       )}
+
+      {/* ── Investment Materials (Box folders) ── */}
+      <div className="mb-8">
+        <h2
+          className="text-xl font-semibold text-gray-900 mb-4"
+          style={{ fontFamily: 'var(--font-eb-garamond)' }}
+        >
+          Investment Materials
+        </h2>
+        <InvestmentMaterials slug={slug} />
+      </div>
 
       {/* ── Press, Emails, Media ── */}
       <div className="space-y-8">

@@ -31,7 +31,7 @@ export async function GET(
   }
 }
 
-// POST /api/emails/[slug] — upload a .eml file, parse it, and save metadata
+// POST /api/emails/[slug] — upload a .eml or .pdf file, parse/save metadata
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -45,9 +45,39 @@ export async function POST(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parsed = await simpleParser(buffer, { skipHtmlToText: true });
-
   const emailId = Date.now().toString();
+  const dir = path.join(DATA_DIR, slug);
+  await fs.mkdir(dir, { recursive: true });
+
+  const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+
+  if (isPdf) {
+    // Save the PDF file alongside the JSON metadata
+    const pdfFilename = `${emailId}.pdf`;
+    await fs.writeFile(path.join(dir, pdfFilename), buffer);
+
+    const emailData = {
+      id:       emailId,
+      subject:  file.name.replace(/\.pdf$/i, ''),
+      from:     '',
+      date:     new Date().toISOString(),
+      textBody: '',
+      htmlBody: '',
+      filename: file.name,
+      isPdf:    true,
+      pdfFile:  pdfFilename,
+    };
+
+    await fs.writeFile(
+      path.join(dir, `${emailId}.json`),
+      JSON.stringify(emailData, null, 2)
+    );
+
+    return NextResponse.json(emailData);
+  }
+
+  // .eml file — parse with mailparser
+  const parsed = await simpleParser(buffer, { skipHtmlToText: true });
 
   // Strip unresolvable cid: image references from the HTML so they don't show
   // as broken image icons — external images (https://) will still load fine
@@ -63,8 +93,6 @@ export async function POST(
     filename: file.name,
   };
 
-  const dir = path.join(DATA_DIR, slug);
-  await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, `${emailId}.json`),
     JSON.stringify(emailData, null, 2)
