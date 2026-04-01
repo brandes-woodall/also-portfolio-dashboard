@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   Company, Email, PressLink, MediaItem, BoxFolder,
   fmtUSD, fmtPct, fmtMOIC, toSlug,
-  isSafe, getCurrentValue, getOwnership, getMOIC,
+  isSafe,
 } from '../../lib/portfolio';
 
 // ── Video embed helpers ──────────────────────────────────────────────────────
@@ -952,18 +952,14 @@ export default function CompanyPage() {
   const emails    = company.emails.split(',').map((s) => s.trim()).filter(Boolean);
 
   const funds = [
-    { label: 'AC2',      investment: company.ac2Investment,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
-    { label: 'AC3',      investment: company.ac3Investment,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap      },
-    { label: 'Catalyst', investment: company.catalystInvestment, shares: company.catalystShares, safeCap: company.catalystSafeCap },
+    { label: 'AC2',      investment: company.ac2Investment,      value: company.ac2CurrentValue,      moic: company.ac2MOIC,      ownership: company.ac2Ownership,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap,      tranches: company.ac2Tranches || []      },
+    { label: 'AC3',      investment: company.ac3Investment,      value: company.ac3CurrentValue,      moic: company.ac3MOIC,      ownership: company.ac3Ownership,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap,      tranches: company.ac3Tranches || []      },
+    { label: 'Catalyst', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap, tranches: company.catalystTranches || [] },
   ].filter((f) => f.investment > 0);
 
   const companyInvested  = funds.reduce((s, f) => s + f.investment, 0);
-  const companyValue     = funds.reduce(
-    (s, f) => s + getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare), 0
-  );
-  const companyOwnership = funds.reduce(
-    (s, f) => s + getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding), 0
-  );
+  const companyValue     = funds.reduce((s, f) => s + f.value, 0);
+  const companyOwnership = funds.reduce((s, f) => s + f.ownership, 0);
   const companyMOIC = companyInvested > 0 ? companyValue / companyInvested : 0;
 
   return (
@@ -1049,11 +1045,9 @@ export default function CompanyPage() {
         </button>
 
         {expanded && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-4">
             {funds.map((f) => {
-              const safe      = isSafe(f.shares, f.safeCap);
-              const ownership = getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding);
-              const moic      = getMOIC(f.investment, f.shares, f.safeCap, company.pricePerShare);
+              const safe = isSafe(f.shares, f.safeCap);
 
               return (
                 <div key={f.label} className="bg-gray-50 rounded-lg p-4">
@@ -1065,20 +1059,38 @@ export default function CompanyPage() {
                       </span>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    <div>
                       <span className="text-xs text-gray-400">Invested</span>
-                      <span className="text-xs font-medium text-gray-700">{fmtUSD(f.investment)}</span>
+                      <p className="text-xs font-medium text-gray-700">{fmtUSD(f.investment)}</p>
                     </div>
-                    <div className="flex justify-between">
+                    <div>
+                      <span className="text-xs text-gray-400">Value</span>
+                      <p className="text-xs font-medium text-gray-700">{fmtUSD(f.value)}</p>
+                    </div>
+                    <div>
                       <span className="text-xs text-gray-400">Ownership</span>
-                      <span className="text-xs font-medium text-gray-700">{fmtPct(ownership)}</span>
+                      <p className="text-xs font-medium text-gray-700">{fmtPct(f.ownership)}</p>
                     </div>
-                    <div className="flex justify-between">
+                    <div>
                       <span className="text-xs text-gray-400">MOIC</span>
-                      <span className="text-xs font-medium text-gray-700">{fmtMOIC(moic)}</span>
+                      <p className="text-xs font-medium text-gray-700">{fmtMOIC(f.moic)}</p>
                     </div>
                   </div>
+                  {/* Tranche detail */}
+                  {f.tranches.length > 1 && (
+                    <div className="border-t border-gray-200 pt-2 space-y-1.5">
+                      <p className="text-xs text-gray-400 mb-1">Tranches</p>
+                      {f.tranches.map((t, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500 truncate flex-1 mr-2">
+                            {t.type || t.instrument}{t.investDate ? ` · ${t.investDate}` : ''}
+                          </span>
+                          <span className="text-gray-600 font-medium shrink-0">{fmtUSD(t.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -1,5 +1,17 @@
 // ── Shared types & helpers for the portfolio dashboard ───────────────────────
 
+export interface TrancheDetail {
+  instrument: string;
+  type: string;
+  investDate: string;
+  amount: number;
+  postMoneyCap: number;
+  shares: number;
+  currentPrice: number;
+  value: number;
+  moic: number;
+}
+
 export interface Company {
   name: string;
   foundingTeam: string;
@@ -8,17 +20,34 @@ export interface Company {
   website: string;
   fund: string;
   category: string;
+  legalName: string;
+  // ── AC2 (Fund II) ─────────────────────
   ac2Investment: number;
+  ac2SafeCap: number;
   ac2Shares: number;
+  ac2CurrentValue: number;
+  ac2MOIC: number;
+  ac2Ownership: number;
+  ac2Tranches: TrancheDetail[];
+  // ── AC3 (Fund III) ────────────────────
   ac3Investment: number;
+  ac3SafeCap: number;
   ac3Shares: number;
+  ac3CurrentValue: number;
+  ac3MOIC: number;
+  ac3Ownership: number;
+  ac3Tranches: TrancheDetail[];
+  // ── Catalyst (Co-Investments) ─────────
   catalystInvestment: number;
+  catalystSafeCap: number;
   catalystShares: number;
+  catalystCurrentValue: number;
+  catalystMOIC: number;
+  catalystOwnership: number;
+  catalystTranches: TrancheDetail[];
+  // ── Shared ────────────────────────────
   pricePerShare: number;
   sharesOutstanding: number;
-  ac2SafeCap: number;
-  ac3SafeCap: number;
-  catalystSafeCap: number;
 }
 
 export interface Email {
@@ -81,42 +110,6 @@ export const toSlug = (name: string) =>
 
 // ── SAFE helpers ─────────────────────────────────────────────────────────────
 export const isSafe = (shares: number, safeCap: number) => shares === 0 && safeCap > 0;
-
-export const getCurrentValue = (
-  investment: number,
-  shares: number,
-  safeCap: number,
-  pricePerShare: number
-): number => {
-  if (!investment) return 0;
-  if (isSafe(shares, safeCap)) return investment;
-  if (!shares || !pricePerShare) return 0;
-  return shares * pricePerShare;
-};
-
-export const getOwnership = (
-  investment: number,
-  shares: number,
-  safeCap: number,
-  sharesOutstanding: number
-): number => {
-  if (!investment) return 0;
-  if (isSafe(shares, safeCap)) return safeCap > 0 ? investment / safeCap : 0;
-  if (!shares || !sharesOutstanding) return 0;
-  return shares / sharesOutstanding;
-};
-
-export const getMOIC = (
-  investment: number,
-  shares: number,
-  safeCap: number,
-  pricePerShare: number
-): number => {
-  if (!investment) return 0;
-  if (isSafe(shares, safeCap)) return 1.0;
-  if (!shares || !pricePerShare) return 0;
-  return (shares * pricePerShare) / investment;
-};
 
 // ── Fund constants ───────────────────────────────────────────────────────────
 export const AC2_FUND_SIZE = 22_080_641;

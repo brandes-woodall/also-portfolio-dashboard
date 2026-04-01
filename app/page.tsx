@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Company,
   fmtUSD, fmtUSDFull, fmtPct, fmtMOIC, toSlug,
-  isSafe, getCurrentValue, getOwnership, getMOIC,
+  isSafe,
   AC2_FUND_SIZE, AC3_FUND_SIZE,
 } from './lib/portfolio';
 
@@ -38,14 +38,14 @@ export default function Home() {
   for (const c of companies) {
     if (c.ac2Investment) {
       ac2Invested += c.ac2Investment;
-      ac2Value    += getCurrentValue(c.ac2Investment, c.ac2Shares, c.ac2SafeCap, c.pricePerShare);
+      ac2Value    += c.ac2CurrentValue;
     }
     if (c.ac3Investment) {
       ac3Invested += c.ac3Investment;
-      ac3Value    += getCurrentValue(c.ac3Investment, c.ac3Shares, c.ac3SafeCap, c.pricePerShare);
+      ac3Value    += c.ac3CurrentValue;
     }
     if (c.catalystInvestment) {
-      catalystValue += getCurrentValue(c.catalystInvestment, c.catalystShares, c.catalystSafeCap, c.pricePerShare);
+      catalystValue += c.catalystCurrentValue;
     }
   }
   const firmAUM =
@@ -72,15 +72,15 @@ export default function Home() {
   for (const c of filtered) {
     if ((fundFilter === 'All' || fundFilter === 'AC2') && c.ac2Investment) {
       totalInvested += c.ac2Investment;
-      totalValue    += getCurrentValue(c.ac2Investment, c.ac2Shares, c.ac2SafeCap, c.pricePerShare);
+      totalValue    += c.ac2CurrentValue;
     }
     if ((fundFilter === 'All' || fundFilter === 'AC3') && c.ac3Investment) {
       totalInvested += c.ac3Investment;
-      totalValue    += getCurrentValue(c.ac3Investment, c.ac3Shares, c.ac3SafeCap, c.pricePerShare);
+      totalValue    += c.ac3CurrentValue;
     }
     if ((fundFilter === 'All' || fundFilter === 'Catalyst') && c.catalystInvestment) {
       totalInvested += c.catalystInvestment;
-      totalValue    += getCurrentValue(c.catalystInvestment, c.catalystShares, c.catalystSafeCap, c.pricePerShare);
+      totalValue    += c.catalystCurrentValue;
     }
   }
   const portfolioMOIC = totalInvested > 0 ? totalValue / totalInvested : 0;
@@ -170,18 +170,14 @@ export default function Home() {
           const isOpen = expanded.has(company.name);
 
           const funds = [
-            { label: 'AC2',      investment: company.ac2Investment,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
-            { label: 'AC3',      investment: company.ac3Investment,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap      },
-            { label: 'Catalyst', investment: company.catalystInvestment, shares: company.catalystShares, safeCap: company.catalystSafeCap },
+            { label: 'AC2',      investment: company.ac2Investment,      value: company.ac2CurrentValue,      moic: company.ac2MOIC,      ownership: company.ac2Ownership,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
+            { label: 'AC3',      investment: company.ac3Investment,      value: company.ac3CurrentValue,      moic: company.ac3MOIC,      ownership: company.ac3Ownership,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap      },
+            { label: 'Catalyst', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap },
           ].filter((f) => f.investment > 0);
 
           const companyInvested  = funds.reduce((s, f) => s + f.investment, 0);
-          const companyValue     = funds.reduce(
-            (s, f) => s + getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare), 0
-          );
-          const companyOwnership = funds.reduce(
-            (s, f) => s + getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding), 0
-          );
+          const companyValue     = funds.reduce((s, f) => s + f.value, 0);
+          const companyOwnership = funds.reduce((s, f) => s + f.ownership, 0);
           const companyMOIC = companyInvested > 0 ? companyValue / companyInvested : 0;
 
           return (
@@ -263,10 +259,7 @@ export default function Home() {
                 {isOpen && (
                   <div className="space-y-2 mt-2">
                     {funds.map((f) => {
-                      const safe      = isSafe(f.shares, f.safeCap);
-                      const value     = getCurrentValue(f.investment, f.shares, f.safeCap, company.pricePerShare);
-                      const ownership = getOwnership(f.investment, f.shares, f.safeCap, company.sharesOutstanding);
-                      const moic      = getMOIC(f.investment, f.shares, f.safeCap, company.pricePerShare);
+                      const safe = isSafe(f.shares, f.safeCap);
 
                       return (
                         <div key={f.label} className="bg-gray-50 rounded-lg p-3">
@@ -285,11 +278,11 @@ export default function Home() {
                             </div>
                             <div>
                               <p className="text-xs text-gray-400">Ownership</p>
-                              <p className="text-xs font-medium text-gray-700">{fmtPct(ownership)}</p>
+                              <p className="text-xs font-medium text-gray-700">{fmtPct(f.ownership)}</p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-400">MOIC</p>
-                              <p className="text-xs font-medium text-gray-700">{fmtMOIC(moic)}</p>
+                              <p className="text-xs font-medium text-gray-700">{fmtMOIC(f.moic)}</p>
                             </div>
                           </div>
                         </div>
