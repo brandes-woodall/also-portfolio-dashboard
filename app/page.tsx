@@ -194,16 +194,35 @@ export default function Home() {
               >
                 {/* Card header */}
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    <Image
-                      src={`/logos/${slug}.png`}
-                      alt={company.name}
-                      width={40}
-                      height={40}
-                      className="object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  </div>
+                  {company.website ? (
+                    <a
+                      href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden hover:border-amber-300 transition-colors"
+                    >
+                      <Image
+                        src={`/logos/${slug}.png`}
+                        alt={company.name}
+                        width={40}
+                        height={40}
+                        className="object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </a>
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      <Image
+                        src={`/logos/${slug}.png`}
+                        alt={company.name}
+                        width={40}
+                        height={40}
+                        className="object-contain"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <h2 className="font-semibold text-gray-900 truncate">{company.name}</h2>
                     {company.website && (
