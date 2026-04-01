@@ -7,12 +7,12 @@ import {
   Company,
   fmtUSD, fmtUSDFull, fmtPct, fmtMOIC, toSlug,
   isSafe,
-  AC2_FUND_SIZE, AC3_FUND_SIZE,
 } from './lib/portfolio';
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function Home() {
   const [companies, setCompanies]   = useState<Company[]>([]);
+  const [fundSizes, setFundSizes]   = useState({ ac2: 0, ac3: 0 });
   const [loading, setLoading]       = useState(true);
   const [fundFilter, setFundFilter] = useState('All');
   const [catFilter, setCatFilter]   = useState('All');
@@ -21,7 +21,7 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/portfolio')
       .then((r) => r.json())
-      .then((data) => { setCompanies(data); setLoading(false); });
+      .then((data) => { setCompanies(data.companies || []); setFundSizes(data.fundSizes || { ac2: 0, ac3: 0 }); setLoading(false); });
   }, []);
 
   const toggleExpand = (name: string) =>
@@ -49,8 +49,8 @@ export default function Home() {
     }
   }
   const firmAUM =
-    (AC2_FUND_SIZE - ac2Invested + ac2Value) +
-    (AC3_FUND_SIZE - ac3Invested + ac3Value) +
+    (fundSizes.ac2 - ac2Invested + ac2Value) +
+    (fundSizes.ac3 - ac3Invested + ac3Value) +
     catalystValue;
 
   // ── Filter ────────────────────────────────────────────────────────────────
@@ -60,9 +60,11 @@ export default function Home() {
       (fundFilter === 'AC2'      && c.ac2Investment > 0)      ||
       (fundFilter === 'AC3'      && c.ac3Investment > 0)      ||
       (fundFilter === 'Catalyst' && c.catalystInvestment > 0);
+    const cat = c.category.toLowerCase();
     const catOk =
       catFilter === 'All' ||
-      c.category.toLowerCase() === catFilter.toLowerCase();
+      cat === catFilter.toLowerCase() ||
+      (catFilter.toLowerCase() === 'opportunistic' && cat.includes('scout fund'));
     return fundOk && catOk;
   });
 

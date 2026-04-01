@@ -202,18 +202,35 @@ export async function GET() {
     const dashRange = 'Sheet1!B3:S100';
     const dashRows = await fetchSheet(DASHBOARD_SHEET_ID, dashRange);
 
-    if (dashRows.length === 0) return NextResponse.json([]);
+    if (dashRows.length === 0) return NextResponse.json({ companies: [], fundSizes: { ac2: 0, ac3: 0 } });
 
-    // ── 2. Fetch the Track Record fund tabs ──────────────────────────────
-    // All three tabs share the same layout:
+    // ── 2. Fetch the Track Record fund tabs + summary ─────────────────────
+    // All three fund tabs share the same layout:
     // Row 1: Fund title, Row 2: subtitle, Row 3: "As of" date, Row 4: blank, Row 5: headers
     // Row 6+: data (company tranches)
     // → array index 5 = first data row when fetching from A1
-    const [f2Rows, f3Rows, ciRows] = await Promise.all([
+    const [f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:W50"),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:W30"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AF30"),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AH30"),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F50"),
     ]);
+
+    // ── 2b. Parse committed capital from Track Record summary tab ────────
+    // Rows contain: ["", "Fund II/III", "Committed Capital: ", "", " $ XX,XXX,XXX "]
+    // We find rows with "Committed Capital" and read the fund name + value
+    let ac2FundSize = 0;
+    let ac3FundSize = 0;
+    for (const row of trSummaryRows) {
+      const hasCommitted = row.some(cell => (cell || '').includes('Committed Capital'));
+      if (!hasCommitted) continue;
+      const fundLabel = (row[1] || '').trim();
+      // The value is in the next non-empty cell after "Committed Capital"
+      const valueCell = row.find((cell, idx) => idx > 2 && cell && cell.trim().startsWith('$'));
+      const fundSize = valueCell ? parseNum(valueCell) : 0;
+      if (fundLabel === 'Fund III') ac3FundSize = fundSize;
+      else if (fundLabel === 'Fund II') ac2FundSize = fundSize;
+    }
 
     // Header row is at index 4 (row 5 in sheet), data starts at index 5 (row 6)
     const f2Tranches = parseTranches(f2Rows, 4, 5);
@@ -304,7 +321,10 @@ export async function GET() {
         };
       });
 
-    return NextResponse.json(companies);
+    return NextResponse.json({
+      companies,
+      fundSizes: { ac2: ac2FundSize, ac3: ac3FundSize },
+    });
   } catch (e) {
     console.error('Portfolio API error:', e);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });

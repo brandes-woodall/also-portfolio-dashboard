@@ -126,5 +126,3 @@ export const toSlug = (name: string) =>
 export const isSafe = (shares: number, safeCap: number) => shares === 0 && safeCap > 0;
 
 // ── Fund constants ───────────────────────────────────────────────────────────
-export const AC2_FUND_SIZE = 22_080_641;
-export const AC3_FUND_SIZE = 52_000_000;

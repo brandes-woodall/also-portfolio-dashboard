@@ -920,8 +920,8 @@ export default function CompanyPage() {
   useEffect(() => {
     fetch('/api/portfolio')
       .then((r) => r.json())
-      .then((data: Company[]) => {
-        const match = data.find((c) => toSlug(c.name) === slug);
+      .then((data: { companies: Company[] }) => {
+        const match = (data.companies || []).find((c) => toSlug(c.name) === slug);
         setCompany(match ?? null);
         setLoading(false);
       });
@@ -1035,7 +1035,7 @@ export default function CompanyPage() {
         <div className="border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Current Stage</p>
           {company.currentStage ? (
-            <span className="inline-block text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700 mt-1">{company.currentStage}</span>
+            <p className="text-xl font-medium text-gray-900">{company.currentStage}</p>
           ) : (
             <p className="text-xl text-gray-300">—</p>
           )}
@@ -1130,27 +1130,28 @@ export default function CompanyPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {founders.map((founder, i) => (
               <div key={i} className="border border-gray-200 rounded-xl p-4 hover:border-yellow-300 transition-colors">
-                <p className="text-sm font-medium text-gray-900">{founder}</p>
-                <div className="flex items-center gap-3 mt-1.5">
-                  {linkedins[i] && (
-                    <a
-                      href={linkedins[i].startsWith('http') ? linkedins[i] : `https://${linkedins[i]}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-amber-600 hover:text-amber-700 hover:underline"
-                    >
-                      LinkedIn
-                    </a>
-                  )}
-                  {emails[i] && (
+                {linkedins[i] ? (
+                  <a
+                    href={linkedins[i].startsWith('http') ? linkedins[i] : `https://${linkedins[i]}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-gray-900 hover:text-amber-600 hover:underline"
+                  >
+                    {founder}
+                  </a>
+                ) : (
+                  <p className="text-sm font-medium text-gray-900">{founder}</p>
+                )}
+                {emails[i] && (
+                  <div className="mt-1.5">
                     <a
                       href={`mailto:${emails[i]}`}
                       className="text-xs text-gray-400 hover:text-gray-600"
                     >
                       {emails[i]}
                     </a>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
