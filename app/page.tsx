@@ -221,14 +221,14 @@ export default function Home() {
                     </span>
                   ))}
                   {company.category && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-amber-700">
                       {company.category}
                     </span>
                   )}
                 </div>
 
                 {/* Company-level summary stats */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <div>
                     <p className="text-xs text-gray-400">Invested</p>
                     <p className="text-sm font-medium text-gray-800">{fmtUSD(companyInvested)}</p>
@@ -240,6 +240,14 @@ export default function Home() {
                   <div>
                     <p className="text-xs text-gray-400">MOIC</p>
                     <p className="text-sm font-medium text-gray-800">{fmtMOIC(companyMOIC)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Current Stage</p>
+                    {company.currentStage ? (
+                      <p className="text-sm font-medium text-gray-800">{company.currentStage}</p>
+                    ) : (
+                      <p className="text-sm text-gray-300">—</p>
+                    )}
                   </div>
                 </div>
               </Link>

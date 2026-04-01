@@ -10,6 +10,8 @@ export interface TrancheDetail {
   currentPrice: number;
   value: number;
   moic: number;
+  vehicleName: string;
+  stage: string;
 }
 
 export interface Company {
@@ -20,6 +22,7 @@ export interface Company {
   website: string;
   fund: string;
   category: string;
+  currentStage: string;
   legalName: string;
   // ── AC2 (Fund II) ─────────────────────
   ac2Investment: number;
@@ -93,11 +96,22 @@ export interface MediaItem {
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 export const fmtUSD = (n: number) =>
-  n >= 1_000_000
-    ? `$${(n / 1_000_000).toFixed(2)}M`
+  n >= 1_000_000_000
+    ? `$${(n / 1_000_000_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}B`
+    : n >= 1_000_000
+    ? `$${(n / 1_000_000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}M`
     : n >= 1_000
     ? `$${(n / 1_000).toFixed(0)}K`
     : `$${n.toFixed(0)}`;
+
+export const fmtUSDRoundM = (n: number) =>
+  n >= 1_000_000_000
+    ? `$${(n / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`
+    : n >= 1_000_000
+    ? `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+    : n >= 1_000
+    ? `$${Math.round(n / 1_000)}K`
+    : `$${Math.round(n)}`;
 
 export const fmtUSDFull = (n: number) =>
   '$' + Math.round(n).toLocaleString('en-US');

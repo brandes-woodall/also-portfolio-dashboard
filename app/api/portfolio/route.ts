@@ -11,46 +11,8 @@ const DASHBOARD_SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID!;
 const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1depwL5A8lDHBgLohm3XirkuqaFjrgx57yyPC7sbr4Gg';
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 
-// ── Name mapping: colloquial → legal name(s) in Track Record ─────────────────
-// This allows matching between the Portfolio Dashboard sheet (colloquial names)
-// and the Track Record sheet (legal entity names). A dashboard entry can map to
-// one or more legal names (e.g. when a company has been renamed).
-const NAME_MAP: Record<string, string[]> = {
-  'AnySignal':              ['AnySignal, Inc.'],
-  'Northwood':              ['Northwood Space Corporation'],
-  'Sentient Machines':      ['Sentient Machines, Inc. (fka Hocc Robotics, Inc.)'],
-  '4D Surgical':            ['4D Surgical, Inc.'],
-  'Andrenam':               ['AndrenaM, Inc.'],
-  'Grounded':               ['Grounded RVs, Inc.'],
-  'Spec':                   ['Talos Automata, Inc. (aka Spec)'],
-  'Vital Lyfe':             ['Vital Lyfe, Inc.'],
-  'Lazarus':                ['Lazarus Holding, Ltd.'],
-  'Metal Cross':            ['Metal Cross Corporation'],
-  'Mesh Optical':           ['Mesh Optical Technologies Corporation'],
-  'Mantari':                ['Mantari Industries, Inc.'],
-  'Sea12':                  ['Sea12 Technologies, Inc.'],
-  'River':                  ['River Technologies'],
-  'International Autonomy': ['International Autonomy Corporation'],
-  'Atlas':                  ['Atlas Propulsion, Inc.'],
-  'Fyn':                    ['Fyn Industries, Inc.'],
-  'Tandem':                 ['Tandem Intelligence, Inc.'],
-  'Julumuqi':               ['Julumuqi, Inc.'],
-  'Trellis':                ['Trellis Finance Corp.'],
-  'Higlo':                  ['Pommelhorse Ltd. (aka Higlo)'],
-  'Plan Z':                 ['Plan Z Capital, Inc.'],
-  'Blitz':                  ['Blitz Industries, Inc.'],
-  'Maka Media':             ['Maka Media, Inc.'],
-  'Strata':                 ['Strata Robotics, Inc.'],
-  'Radiant':                ['Radiant Industries, Inc.'],
-  'Varda':                  ['Varda Space Industries, Inc.'],
-  'K2 Space':               ['K2 Space Corporation'],
-  'Vast':                   ['Vast, Inc.'],
-  'Mobius':                 ['Mobius Industries, Inc.'],
-  'Nexa Labs':              ['Nexa Labs, Inc.'],
-  'Crew Intelligence':      ['Crew Intelligence, Inc.'],
-  'a37':                    ['a37, Inc.'],
-  'Aptamino':               ['Aptamino, Inc.'],
-};
+// Legal name now comes from Column I of the Portfolio Dashboard sheet.
+// No more hardcoded NAME_MAP needed.
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 async function fetchSheet(sheetId: string, range: string) {
@@ -92,17 +54,30 @@ interface Tranche {
   moic: number;
   sharesOutstanding: number;
   currentOwnership: number;
+  vehicleName: string;
+  stage: string;
 }
 
 function parseTranches(rows: string[][], headerRow: number, dataStartRow: number): Tranche[] {
   // Find column indices from the header row
   const headers = rows[headerRow] || [];
-  let colMOIC = -1, colSharesOut = -1, colOwnership = -1;
+  let colMOIC = -1, colSharesOut = -1, colOwnership = -1, colVehicleName = -1, colStage = -1;
   for (let i = 0; i < headers.length; i++) {
     const h = (headers[i] || '').trim();
     if (h === 'MOIC') colMOIC = i;
     else if (h === 'Total Shares Outstanding') colSharesOut = i;
     else if (h === 'Current Tranche Ownership') colOwnership = i;
+    else if (h === 'Vehicle Name') colVehicleName = i;
+    else if (h === 'Stage') colStage = i;
+  }
+  // "Vehicle Name" and "Stage" may be in a merged header row above the main header
+  if ((colVehicleName === -1 || colStage === -1) && headerRow > 0) {
+    const aboveRow = rows[headerRow - 1] || [];
+    for (let i = 0; i < aboveRow.length; i++) {
+      const h = (aboveRow[i] || '').trim();
+      if (h === 'Vehicle Name' && colVehicleName === -1) colVehicleName = i;
+      else if (h === 'Stage' && colStage === -1) colStage = i;
+    }
   }
   // Fallback to Fund II/III defaults if headers weren't found
   if (colMOIC === -1) colMOIC = 18;
@@ -130,6 +105,8 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
       moic:              parseNum(r[colMOIC]),
       sharesOutstanding: parseNum(r[colSharesOut]),
       currentOwnership:  parsePct(r[colOwnership]),
+      vehicleName:       colVehicleName >= 0 ? (r[colVehicleName] || '').trim() : '',
+      stage:             colStage >= 0 ? (r[colStage] || '').trim() : '',
     });
   }
   return tranches;
@@ -155,6 +132,8 @@ interface FundSummary {
     currentPrice: number;
     value: number;
     moic: number;
+    vehicleName: string;
+    stage: string;
   }[];
 }
 
@@ -197,6 +176,8 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
       currentPrice: t.currentPrice,
       value: t.totalValue,
       moic: t.moic,
+      vehicleName: t.vehicleName,
+      stage: t.stage,
     };
   });
 
@@ -231,7 +212,7 @@ export async function GET() {
     const [f2Rows, f3Rows, ciRows] = await Promise.all([
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:W50"),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:W30"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:W30"),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AF30"),
     ]);
 
     // Header row is at index 4 (row 5 in sheet), data starts at index 5 (row 6)
@@ -258,7 +239,9 @@ export async function GET() {
       .filter((row: string[]) => row[0])
       .map((row: string[]) => {
         const colloquialName = row[0] || '';
-        const legalNames = NAME_MAP[colloquialName] || [colloquialName];
+        // Range starts at Column B, so B=0, C=1, ... I=7, J=8
+        const legalName = (row[7] || '').trim(); // Column I: Legal Name
+        const legalNames = legalName ? [legalName] : [colloquialName];
 
         // Look up tranches for this company across all matching legal names
         const f2Company: Tranche[] = [];
@@ -288,6 +271,7 @@ export async function GET() {
           website:            row[4] || '',
           fund:               row[5] || '',
           category:           row[6] || '',
+          currentStage:       (row[8] || '').trim(), // Column J: Current Stage
           // Legal name for reference
           legalName:          legalNames[0],
           // ── AC2 (Fund II) from Track Record ────────────

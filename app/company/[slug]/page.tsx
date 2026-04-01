@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   Company, Email, PressLink, MediaItem, BoxFolder,
-  fmtUSD, fmtPct, fmtMOIC, toSlug,
+  fmtUSD, fmtUSDRoundM, fmtPct, fmtMOIC, toSlug,
   isSafe,
 } from '../../lib/portfolio';
 
@@ -141,7 +141,7 @@ function EmailSection({ slug }: { slug: string }) {
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
+            className="text-xs text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-40"
           >
             {uploading ? 'Uploading…' : '↑ Upload .eml / .pdf'}
           </button>
@@ -219,7 +219,7 @@ function InvestmentMaterials({ slug }: { slug: string }) {
         <h3 className="text-sm font-semibold text-gray-700">Investment Materials</h3>
         <button
           onClick={() => setAdding((a) => !a)}
-          className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
+          className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
         >
           {adding ? 'Cancel' : '+ Box Folder'}
         </button>
@@ -267,7 +267,7 @@ function InvestmentMaterials({ slug }: { slug: string }) {
                     href={folder.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs font-medium text-gray-600 hover:text-yellow-600"
+                    className="text-xs font-medium text-gray-600 hover:text-amber-600"
                   >
                     {folder.title}
                   </a>
@@ -293,7 +293,7 @@ function InvestmentMaterials({ slug }: { slug: string }) {
                     href={folder.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-xs text-gray-400 bg-gray-50 rounded-xl p-4 text-center hover:bg-yellow-50 hover:text-yellow-600 transition-colors"
+                    className="block text-xs text-gray-400 bg-gray-50 rounded-xl p-4 text-center hover:bg-yellow-50 hover:text-amber-600 transition-colors"
                   >
                     Open in Box →
                   </a>
@@ -473,14 +473,14 @@ function MediaSection({ slug }: { slug: string }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setAddMode((m) => m === 'link' ? 'none' : 'link')}
-              className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
+              className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
             >
               {addMode === 'link' ? 'Cancel' : '+ Link'}
             </button>
             <button
               onClick={() => { setAddMode('none'); fileRef.current?.click(); }}
               disabled={uploading}
-              className="text-xs text-gray-400 hover:text-yellow-600 transition-colors disabled:opacity-40"
+              className="text-xs text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-40"
             >
               {uploading ? 'Uploading…' : '↑ Image'}
             </button>
@@ -538,7 +538,7 @@ function MediaSection({ slug }: { slug: string }) {
                     </button>
                     <button
                       onClick={() => setLightbox(item)}
-                      className="flex-1 text-xs font-medium text-gray-700 hover:text-yellow-600 truncate text-left"
+                      className="flex-1 text-xs font-medium text-gray-700 hover:text-amber-600 truncate text-left"
                     >
                       {item.originalName}
                     </button>
@@ -577,7 +577,7 @@ function MediaSection({ slug }: { slug: string }) {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
+                          <p className="text-xs font-medium text-gray-700 hover:text-amber-600 line-clamp-2 leading-snug">
                             {item.title}
                           </p>
                           {item.date && (
@@ -593,7 +593,7 @@ function MediaSection({ slug }: { slug: string }) {
                       <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => editingId === item.id ? closeEdit() : openEdit(item)}
-                          className="text-xs text-gray-400 hover:text-yellow-600"
+                          className="text-xs text-gray-400 hover:text-amber-600"
                         >
                           {editingId === item.id ? 'Cancel' : 'Edit'}
                         </button>
@@ -618,7 +618,7 @@ function MediaSection({ slug }: { slug: string }) {
                             <button
                               onClick={() => thumbRef.current?.click()}
                               disabled={editSaving}
-                              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-yellow-600 disabled:opacity-40"
+                              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-amber-600 disabled:opacity-40"
                             >
                               {item.thumbnail ? 'Replace' : 'Upload image'}
                             </button>
@@ -761,7 +761,7 @@ function PressSection({ slug }: { slug: string }) {
         <h3 className="text-sm font-semibold text-gray-700">Press</h3>
         <button
           onClick={() => setAdding((a) => !a)}
-          className="text-xs text-gray-400 hover:text-yellow-600 transition-colors"
+          className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
         >
           {adding ? 'Cancel' : '+ Link'}
         </button>
@@ -822,7 +822,7 @@ function PressSection({ slug }: { slug: string }) {
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-700 hover:text-yellow-600 line-clamp-2 leading-snug">
+                    <p className="text-xs font-medium text-gray-700 hover:text-amber-600 line-clamp-2 leading-snug">
                       {link.title}
                     </p>
                     {link.date && (
@@ -838,7 +838,7 @@ function PressSection({ slug }: { slug: string }) {
                 <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => editingId === link.id ? closeEdit() : openEdit(link)}
-                    className="text-xs text-gray-400 hover:text-yellow-600"
+                    className="text-xs text-gray-400 hover:text-amber-600"
                   >
                     {editingId === link.id ? 'Cancel' : 'Edit'}
                   </button>
@@ -863,7 +863,7 @@ function PressSection({ slug }: { slug: string }) {
                       <button
                         onClick={() => thumbRef.current?.click()}
                         disabled={editSaving}
-                        className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-yellow-600 disabled:opacity-40"
+                        className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-500 hover:border-yellow-400 hover:text-amber-600 disabled:opacity-40"
                       >
                         {link.thumbnail ? 'Replace' : 'Upload image'}
                       </button>
@@ -916,7 +916,6 @@ export default function CompanyPage() {
   const slug = params.slug as string;
   const [company, setCompany]   = useState<Company | null>(null);
   const [loading, setLoading]   = useState(true);
-  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     fetch('/api/portfolio')
@@ -940,7 +939,7 @@ export default function CompanyPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
         <p className="text-gray-400 text-lg">Company not found.</p>
-        <Link href="/" className="text-sm text-yellow-600 hover:text-yellow-700 hover:underline">
+        <Link href="/" className="text-sm text-amber-600 hover:text-amber-700 hover:underline">
           ← Back to portfolio
         </Link>
       </div>
@@ -1013,14 +1012,14 @@ export default function CompanyPage() {
           </span>
         ))}
         {company.category && (
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
             {company.category}
           </span>
         )}
       </div>
 
       {/* ── Summary stats ── */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="border border-gray-200 rounded-xl p-4">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Invested</p>
           <p className="text-xl font-medium text-gray-900">{fmtUSD(companyInvested)}</p>
@@ -1033,18 +1032,18 @@ export default function CompanyPage() {
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">MOIC</p>
           <p className="text-xl font-medium text-gray-900">{fmtMOIC(companyMOIC)}</p>
         </div>
+        <div className="border border-gray-200 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Current Stage</p>
+          {company.currentStage ? (
+            <span className="inline-block text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700 mt-1">{company.currentStage}</span>
+          ) : (
+            <p className="text-xl text-gray-300">—</p>
+          )}
+        </div>
       </div>
 
       {/* ── Fund breakdown ── */}
       <div className="mb-8">
-        <button
-          onClick={() => setExpanded((e) => !e)}
-          className="text-xs text-gray-400 hover:text-gray-600 mb-2"
-        >
-          {expanded ? '▲ Hide' : '▼ Show'} fund breakdown
-        </button>
-
-        {expanded && (
           <div className="space-y-4">
             {funds.map((f) => {
               const safe = isSafe(f.shares, f.safeCap);
@@ -1078,15 +1077,37 @@ export default function CompanyPage() {
                     </div>
                   </div>
                   {/* Tranche detail */}
-                  {f.tranches.length > 1 && (
-                    <div className="border-t border-gray-200 pt-2 space-y-1.5">
+                  {f.tranches.length > 0 && (
+                    <div className="border-t border-gray-200 pt-2 space-y-2">
                       <p className="text-xs text-gray-400 mb-1">Tranches</p>
                       {f.tranches.map((t, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500 truncate flex-1 mr-2">
-                            {t.type || t.instrument}{t.investDate ? ` · ${t.investDate}` : ''}
-                          </span>
-                          <span className="text-gray-600 font-medium shrink-0">{fmtUSD(t.amount)}</span>
+                        <div key={i} className="bg-white rounded p-2.5 border border-gray-100">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {t.stage && (
+                              <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
+                                {t.stage}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              {t.investDate && <span>{t.investDate}</span>}
+                              {(t.type || t.instrument) && <span>· {t.type || t.instrument}</span>}
+                            </div>
+                          </div>
+                          {f.label === 'Catalyst' && t.vehicleName && (
+                            <p className="text-xs text-gray-500 mt-1">{t.vehicleName}</p>
+                          )}
+                          <div className="flex items-center gap-4 mt-1 text-xs">
+                            <div>
+                              <span className="text-gray-400">Invested </span>
+                              <span className="text-gray-700 font-medium">{fmtUSD(t.amount)}</span>
+                            </div>
+                            {t.postMoneyCap > 0 && (
+                              <div>
+                                <span className="text-gray-400">Post-Money Valuation </span>
+                                <span className="text-gray-700 font-medium">{fmtUSDRoundM(t.postMoneyCap)}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1095,7 +1116,6 @@ export default function CompanyPage() {
               );
             })}
           </div>
-        )}
       </div>
 
       {/* ── Founding Team ── */}
@@ -1117,7 +1137,7 @@ export default function CompanyPage() {
                       href={linkedins[i].startsWith('http') ? linkedins[i] : `https://${linkedins[i]}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline"
+                      className="text-xs text-amber-600 hover:text-amber-700 hover:underline"
                     >
                       LinkedIn
                     </a>
