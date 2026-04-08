@@ -991,26 +991,31 @@ export default function CompanyPage() {
           >
             {company.name}
           </h1>
-          {company.website && (
-            <a
-              href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-gray-400 hover:text-gray-600"
-            >
-              {company.website.replace(/^https?:\/\//, '')}
-            </a>
-          )}
-          {company.address && (
-            <a
-              href={`https://maps.apple.com/?q=${encodeURIComponent(company.address)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-gray-400 hover:text-gray-600"
-            >
-              {company.address}
-            </a>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {company.website && (
+              <a
+                href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-gray-400 hover:text-gray-600"
+              >
+                {company.website.replace(/^https?:\/\//, '')}
+              </a>
+            )}
+            {company.address && (
+              <>
+                {company.website && <span className="text-sm text-gray-300">|</span>}
+                <a
+                  href={`https://maps.apple.com/?q=${encodeURIComponent(company.address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-gray-400 hover:text-gray-600"
+                >
+                  {company.address}
+                </a>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
