@@ -1001,6 +1001,16 @@ export default function CompanyPage() {
               {company.website.replace(/^https?:\/\//, '')}
             </a>
           )}
+          {company.address && (
+            <a
+              href={`https://maps.apple.com/?q=${encodeURIComponent(company.address)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-gray-400 hover:text-gray-600"
+            >
+              {company.address}
+            </a>
+          )}
         </div>
       </div>
 

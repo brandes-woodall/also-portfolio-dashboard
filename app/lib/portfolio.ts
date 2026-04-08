@@ -23,6 +23,7 @@ export interface Company {
   fund: string;
   category: string;
   currentStage: string;
+  address: string;
   legalName: string;
   // ── AC2 (Fund II) ─────────────────────
   ac2Investment: number;

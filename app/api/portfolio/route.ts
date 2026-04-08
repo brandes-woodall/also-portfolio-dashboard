@@ -289,6 +289,7 @@ export async function GET() {
           fund:               row[5] || '',
           category:           row[6] || '',
           currentStage:       (row[8] || '').trim(), // Column J: Current Stage
+          address:            (row[9] || '').trim(), // Column K: Address
           // Legal name for reference
           legalName:          legalNames[0],
           // ── AC2 (Fund II) from Track Record ────────────
