@@ -211,7 +211,7 @@ export default function Home() {
               <thead>
                 <tr className="text-xs text-gray-400 uppercase tracking-wide">
                   <th className="text-left font-normal pb-2">Fund</th>
-                  <th className="text-right font-normal pb-2">Dry Powder</th>
+                  <th className="text-right font-normal pb-2">Uninvested</th>
                   <th className="text-right font-normal pb-2">Deployed Value</th>
                   <th className="text-right font-normal pb-2">Total</th>
                 </tr>
