@@ -58,11 +58,44 @@ export default function Home() {
   const ac1AUM = fundSizes.ac1 > 0
     ? (fundSizes.ac1 - ac1Invested + ac1Value)
     : ac1Value;
-  const firmAUM =
-    ac1AUM +
-    (fundSizes.ac2 - ac2Invested + ac2Value) +
-    (fundSizes.ac3 - ac3Invested + ac3Value) +
-    catalystValue;
+  const ac2AUM = fundSizes.ac2 - ac2Invested + ac2Value;
+  const ac3AUM = fundSizes.ac3 - ac3Invested + ac3Value;
+  const firmAUM = ac1AUM + ac2AUM + ac3AUM + catalystValue;
+
+  // Per-fund breakdown shown in the Firm AUM hover tooltip. `dryPowder` is
+  // null for funds that don't have committed capital (Catalyst always; AC1
+  // until Fund I committed capital is added to the Track Record summary).
+  const aumBreakdown: {
+    label: string;
+    dryPowder: number | null;
+    deployedValue: number;
+    total: number;
+  }[] = [
+    {
+      label: 'AC1',
+      dryPowder: fundSizes.ac1 > 0 ? fundSizes.ac1 - ac1Invested : null,
+      deployedValue: ac1Value,
+      total: ac1AUM,
+    },
+    {
+      label: 'AC2',
+      dryPowder: fundSizes.ac2 > 0 ? fundSizes.ac2 - ac2Invested : null,
+      deployedValue: ac2Value,
+      total: ac2AUM,
+    },
+    {
+      label: 'AC3',
+      dryPowder: fundSizes.ac3 > 0 ? fundSizes.ac3 - ac3Invested : null,
+      deployedValue: ac3Value,
+      total: ac3AUM,
+    },
+    {
+      label: 'Catalyst',
+      dryPowder: null,
+      deployedValue: catalystValue,
+      total: catalystValue,
+    },
+  ];
 
   // ── Filter ────────────────────────────────────────────────────────────────
   const filtered = companies.filter((c) => {
@@ -144,9 +177,57 @@ export default function Home() {
             <p className="text-2xl font-medium text-gray-900">{stat.value}</p>
           </div>
         ))}
-        <div className="border border-gray-200 rounded-xl p-5">
+        <div className="border border-gray-200 rounded-xl p-5 relative group">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Firm AUM</p>
           <p className="text-2xl font-medium text-gray-900">{fmtUSDFull(firmAUM)}</p>
+
+          {/* Hover breakdown */}
+          <div
+            className="
+              absolute top-full right-0 mt-2 z-50 w-[26rem]
+              bg-white border border-gray-200 rounded-xl shadow-lg p-4
+              opacity-0 invisible pointer-events-none
+              group-hover:opacity-100 group-hover:visible
+              transition-opacity duration-150
+            "
+          >
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">
+              AUM Breakdown
+            </p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-400 uppercase tracking-wide">
+                  <th className="text-left font-normal pb-2">Fund</th>
+                  <th className="text-right font-normal pb-2">Dry Powder</th>
+                  <th className="text-right font-normal pb-2">Deployed Value</th>
+                  <th className="text-right font-normal pb-2">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aumBreakdown.map((row) => (
+                  <tr key={row.label} className="text-gray-900">
+                    <td className="py-1">{row.label}</td>
+                    <td className="text-right py-1 text-gray-500">
+                      {row.dryPowder === null ? '—' : fmtUSDFull(row.dryPowder)}
+                    </td>
+                    <td className="text-right py-1">
+                      {fmtUSDFull(row.deployedValue)}
+                    </td>
+                    <td className="text-right py-1 font-medium">
+                      {fmtUSDFull(row.total)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-gray-200">
+                  <td className="pt-2 font-medium">Firm AUM</td>
+                  <td colSpan={2}></td>
+                  <td className="text-right pt-2 font-medium">
+                    {fmtUSDFull(firmAUM)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
