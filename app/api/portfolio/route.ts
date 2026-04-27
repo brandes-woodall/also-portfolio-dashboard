@@ -254,9 +254,14 @@ export async function GET() {
       const hasCommitted = row.some(cell => (cell || '').includes('Committed Capital'));
       if (!hasCommitted) continue;
       const fundLabel = (row[1] || '').trim();
-      // The value is in the next non-empty cell after "Committed Capital"
-      const valueCell = row.find((cell, idx) => idx > 2 && cell && cell.trim().startsWith('$'));
-      const fundSize = valueCell ? parseNum(valueCell) : 0;
+      // The value is the first numeric cell after column 2. We look for any
+      // parseable positive number rather than a leading "$" so this works with
+      // both FORMATTED ("$22,000,000") and UNFORMATTED ("22000000") fetches.
+      let fundSize = 0;
+      for (let idx = 3; idx < row.length; idx++) {
+        const v = parseNum(row[idx] || '');
+        if (v > 0) { fundSize = v; break; }
+      }
       if (fundLabel === 'Fund III') ac3FundSize = fundSize;
       else if (fundLabel === 'Fund II') ac2FundSize = fundSize;
       else if (fundLabel === 'Fund I')  ac1FundSize = fundSize;

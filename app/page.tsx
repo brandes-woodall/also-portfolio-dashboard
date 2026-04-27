@@ -98,20 +98,33 @@ export default function Home() {
   ];
 
   // ── Filter ────────────────────────────────────────────────────────────────
-  const filtered = companies.filter((c) => {
-    const fundOk =
-      fundFilter === 'All' ||
-      (fundFilter === 'AC1'      && c.ac1Investment > 0)      ||
-      (fundFilter === 'AC2'      && c.ac2Investment > 0)      ||
-      (fundFilter === 'AC3'      && c.ac3Investment > 0)      ||
-      (fundFilter === 'Catalyst' && c.catalystInvestment > 0);
-    const cat = c.category.toLowerCase();
-    const catOk =
-      catFilter === 'All' ||
-      cat === catFilter.toLowerCase() ||
-      (catFilter.toLowerCase() === 'opportunistic' && cat.includes('scout fund'));
-    return fundOk && catOk;
-  });
+  // Returns the dollars invested in a company that count under the current
+  // fund filter (e.g. when the filter is "AC2", only AC2 dollars; when "All",
+  // sum across all funds). Used both for filtering and for sort order.
+  const investedUnderFilter = (c: Company) => {
+    if (fundFilter === 'AC1')      return c.ac1Investment;
+    if (fundFilter === 'AC2')      return c.ac2Investment;
+    if (fundFilter === 'AC3')      return c.ac3Investment;
+    if (fundFilter === 'Catalyst') return c.catalystInvestment;
+    return c.ac1Investment + c.ac2Investment + c.ac3Investment + c.catalystInvestment;
+  };
+
+  const filtered = companies
+    .filter((c) => {
+      const fundOk =
+        fundFilter === 'All' ||
+        (fundFilter === 'AC1'      && c.ac1Investment > 0)      ||
+        (fundFilter === 'AC2'      && c.ac2Investment > 0)      ||
+        (fundFilter === 'AC3'      && c.ac3Investment > 0)      ||
+        (fundFilter === 'Catalyst' && c.catalystInvestment > 0);
+      const cat = c.category.toLowerCase();
+      const catOk =
+        catFilter === 'All' ||
+        cat === catFilter.toLowerCase() ||
+        (catFilter.toLowerCase() === 'opportunistic' && cat.includes('scout fund'));
+      return fundOk && catOk;
+    })
+    .sort((a, b) => investedUnderFilter(b) - investedUnderFilter(a));
 
   // ── Portfolio stats ───────────────────────────────────────────────────────
   let totalInvested = 0;
