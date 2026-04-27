@@ -12,7 +12,7 @@ import {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function Home() {
   const [companies, setCompanies]   = useState<Company[]>([]);
-  const [fundSizes, setFundSizes]   = useState({ ac2: 0, ac3: 0 });
+  const [fundSizes, setFundSizes]   = useState({ ac1: 0, ac2: 0, ac3: 0 });
   const [loading, setLoading]       = useState(true);
   const [fundFilter, setFundFilter] = useState('All');
   const [catFilter, setCatFilter]   = useState('All');
@@ -21,7 +21,7 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/portfolio')
       .then((r) => r.json())
-      .then((data) => { setCompanies(data.companies || []); setFundSizes(data.fundSizes || { ac2: 0, ac3: 0 }); setLoading(false); });
+      .then((data) => { setCompanies(data.companies || []); setFundSizes(data.fundSizes || { ac1: 0, ac2: 0, ac3: 0 }); setLoading(false); });
   }, []);
 
   const toggleExpand = (name: string) =>
@@ -32,10 +32,15 @@ export default function Home() {
     });
 
   // ── Firm AUM ─────────────────────────────────────────────────────────────
+  let ac1Invested = 0, ac1Value = 0;
   let ac2Invested = 0, ac2Value = 0;
   let ac3Invested = 0, ac3Value = 0;
   let catalystValue = 0;
   for (const c of companies) {
+    if (c.ac1Investment) {
+      ac1Invested += c.ac1Investment;
+      ac1Value    += c.ac1CurrentValue;
+    }
     if (c.ac2Investment) {
       ac2Invested += c.ac2Investment;
       ac2Value    += c.ac2CurrentValue;
@@ -48,7 +53,13 @@ export default function Home() {
       catalystValue += c.catalystCurrentValue;
     }
   }
+  // For AC1, only treat it as a fund (with undeployed capital) when a committed
+  // capital figure is set; otherwise just count its current value.
+  const ac1AUM = fundSizes.ac1 > 0
+    ? (fundSizes.ac1 - ac1Invested + ac1Value)
+    : ac1Value;
   const firmAUM =
+    ac1AUM +
     (fundSizes.ac2 - ac2Invested + ac2Value) +
     (fundSizes.ac3 - ac3Invested + ac3Value) +
     catalystValue;
@@ -57,6 +68,7 @@ export default function Home() {
   const filtered = companies.filter((c) => {
     const fundOk =
       fundFilter === 'All' ||
+      (fundFilter === 'AC1'      && c.ac1Investment > 0)      ||
       (fundFilter === 'AC2'      && c.ac2Investment > 0)      ||
       (fundFilter === 'AC3'      && c.ac3Investment > 0)      ||
       (fundFilter === 'Catalyst' && c.catalystInvestment > 0);
@@ -72,6 +84,10 @@ export default function Home() {
   let totalInvested = 0;
   let totalValue    = 0;
   for (const c of filtered) {
+    if ((fundFilter === 'All' || fundFilter === 'AC1') && c.ac1Investment) {
+      totalInvested += c.ac1Investment;
+      totalValue    += c.ac1CurrentValue;
+    }
     if ((fundFilter === 'All' || fundFilter === 'AC2') && c.ac2Investment) {
       totalInvested += c.ac2Investment;
       totalValue    += c.ac2CurrentValue;
@@ -136,7 +152,7 @@ export default function Home() {
 
       {/* ── Filters ── */}
       <div className="flex items-center gap-2 flex-wrap mb-8">
-        {['All', 'AC2', 'AC3', 'Catalyst'].map((f) => (
+        {['All', 'AC1', 'AC2', 'AC3', 'Catalyst'].map((f) => (
           <button
             key={f}
             onClick={() => setFundFilter(f)}
@@ -172,6 +188,7 @@ export default function Home() {
           const isOpen = expanded.has(company.name);
 
           const funds = [
+            { label: 'AC1',      investment: company.ac1Investment,      value: company.ac1CurrentValue,      moic: company.ac1MOIC,      ownership: company.ac1Ownership,      shares: company.ac1Shares,      safeCap: company.ac1SafeCap      },
             { label: 'AC2',      investment: company.ac2Investment,      value: company.ac2CurrentValue,      moic: company.ac2MOIC,      ownership: company.ac2Ownership,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
             { label: 'AC3',      investment: company.ac3Investment,      value: company.ac3CurrentValue,      moic: company.ac3MOIC,      ownership: company.ac3Ownership,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap      },
             { label: 'Catalyst', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap },

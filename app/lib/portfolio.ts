@@ -25,6 +25,14 @@ export interface Company {
   currentStage: string;
   address: string;
   legalName: string;
+  // ── AC1 (Fund I) ──────────────────────
+  ac1Investment: number;
+  ac1SafeCap: number;
+  ac1Shares: number;
+  ac1CurrentValue: number;
+  ac1MOIC: number;
+  ac1Ownership: number;
+  ac1Tranches: TrancheDetail[];
   // ── AC2 (Fund II) ─────────────────────
   ac2Investment: number;
   ac2SafeCap: number;

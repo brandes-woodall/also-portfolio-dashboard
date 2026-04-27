@@ -951,6 +951,7 @@ export default function CompanyPage() {
   const emails    = company.emails.split(',').map((s) => s.trim()).filter(Boolean);
 
   const funds = [
+    { label: 'AC1',      investment: company.ac1Investment,      value: company.ac1CurrentValue,      moic: company.ac1MOIC,      ownership: company.ac1Ownership,      shares: company.ac1Shares,      safeCap: company.ac1SafeCap,      tranches: company.ac1Tranches || []      },
     { label: 'AC2',      investment: company.ac2Investment,      value: company.ac2CurrentValue,      moic: company.ac2MOIC,      ownership: company.ac2Ownership,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap,      tranches: company.ac2Tranches || []      },
     { label: 'AC3',      investment: company.ac3Investment,      value: company.ac3CurrentValue,      moic: company.ac3MOIC,      ownership: company.ac3Ownership,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap,      tranches: company.ac3Tranches || []      },
     { label: 'Catalyst', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap, tranches: company.catalystTranches || [] },

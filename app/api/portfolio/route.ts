@@ -8,7 +8,7 @@ const parsePct = (s: string) => {
 
 // ── Sheet IDs ────────────────────────────────────────────────────────────────
 const DASHBOARD_SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID!;
-const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1depwL5A8lDHBgLohm3XirkuqaFjrgx57yyPC7sbr4Gg';
+const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1B7ASqj5Hw661zooKfDSfD3TUFeQ786RpYRuBe5zflRs';
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 
 // Legal name now comes from Column I of the Portfolio Dashboard sheet.
@@ -24,19 +24,19 @@ async function fetchSheet(sheetId: string, range: string) {
 }
 
 // ── Track Record column layout ───────────────────────────────────────────────
-// Columns 1-16 are identical across all three fund tabs.
-// HOWEVER, Co-Investments has an extra "Paid-In Capital" column at position 17,
-// which shifts MOIC, Shares Outstanding, and Ownership by +1.
+// Columns 1-9 are identical across all fund tabs.
+// HOWEVER, columns shift across tabs:
+//   - Fund II / Fund III: standard layout (MOIC at 18)
+//   - Co-Investments: has an extra "Paid-In Capital" column at position 17,
+//     shifting MOIC / Shares Outstanding / Ownership by +1.
+//   - Fund I: has FOUR extra "Transaction" columns (Date of First/Second
+//     Transaction, First/Second PPS) inserted between cols 9 and 16, which
+//     shifts Number of Shares Owned, Current Price, Realized Value, Residual
+//     Value, Total Value, Paid-In Capital, MOIC, Shares Outstanding, Ownership,
+//     and Stage. MOIC ends up at col 25.
 //
-// Fund II / Fund III:              Co-Investments:
-//   17: Realized / Unrealized Gain   17: Paid-In Capital
-//   18: MOIC                          18: Realized / Unrealized Gain
-//   19: Total Shares Outstanding      19: MOIC
-//   20: Current Tranche Ownership     20: Total Shares Outstanding
-//   21: Initial Tranche Ownership     21: Current Tranche Ownership
-//                                     22: Initial Tranche Ownership
-//
-// We detect this automatically by reading the header row.
+// We detect all variable column positions automatically by reading the header
+// row (with a fallback to the Fund II/III defaults).
 
 interface Tranche {
   legalName: string;
@@ -59,49 +59,62 @@ interface Tranche {
 }
 
 function parseTranches(rows: string[][], headerRow: number, dataStartRow: number): Tranche[] {
-  // Find column indices from the header row
+  // Look up column indices from the header row, falling back to a merged
+  // header row above (used for grouped headers like "Vehicle Name").
   const headers = rows[headerRow] || [];
-  let colMOIC = -1, colSharesOut = -1, colOwnership = -1, colVehicleName = -1, colStage = -1;
-  for (let i = 0; i < headers.length; i++) {
-    const h = (headers[i] || '').trim();
-    if (h === 'MOIC') colMOIC = i;
-    else if (h === 'Total Shares Outstanding') colSharesOut = i;
-    else if (h === 'Current Tranche Ownership') colOwnership = i;
-    else if (h === 'Vehicle Name') colVehicleName = i;
-    else if (h === 'Stage') colStage = i;
-  }
-  // "Vehicle Name" and "Stage" may be in a merged header row above the main header
-  if ((colVehicleName === -1 || colStage === -1) && headerRow > 0) {
-    const aboveRow = rows[headerRow - 1] || [];
-    for (let i = 0; i < aboveRow.length; i++) {
-      const h = (aboveRow[i] || '').trim();
-      if (h === 'Vehicle Name' && colVehicleName === -1) colVehicleName = i;
-      else if (h === 'Stage' && colStage === -1) colStage = i;
+  const aboveRow = headerRow > 0 ? (rows[headerRow - 1] || []) : [];
+  const findCol = (...names: string[]): number => {
+    for (const name of names) {
+      for (let i = 0; i < headers.length; i++) {
+        if ((headers[i] || '').trim() === name) return i;
+      }
+      for (let i = 0; i < aboveRow.length; i++) {
+        if ((aboveRow[i] || '').trim() === name) return i;
+      }
     }
-  }
-  // Fallback to Fund II/III defaults if headers weren't found
-  if (colMOIC === -1) colMOIC = 18;
-  if (colSharesOut === -1) colSharesOut = 19;
-  if (colOwnership === -1) colOwnership = 20;
+    return -1;
+  };
+
+  // Pick header-detected column when available; otherwise use the Fund II/III
+  // default index. This keeps existing tabs working while supporting Fund I's
+  // wider layout (which inserts "Transaction" columns shifting cols 12-22).
+  const pick = (detected: number, fallback: number) => detected >= 0 ? detected : fallback;
+  const colName        = pick(findCol('Investment'), 1);
+  const colInstrument  = pick(findCol('Original Instrument'), 2);
+  const colType        = pick(findCol('Type'), 3);
+  const colInvestDate  = pick(findCol('Investment Date'), 4);
+  const colAmount      = pick(findCol('Investment Amount'), 6);
+  const colPostMoney   = pick(findCol('Post-Money Cap / Valuation', 'Post-Money Cap'), 7);
+  const colShares      = pick(findCol('Number of Shares'), 8);
+  const colIssuePrice  = pick(findCol('Issue Price per Share'), 9);
+  const colSharesOwned = pick(findCol('Number of Shares Owned'), 12);
+  const colCurrentPrice = pick(findCol('Current Price per Share'), 13);
+  const colResidual    = pick(findCol('Residual Value'), 15);
+  const colTotalValue  = pick(findCol('Total Value'), 16);
+  const colMOIC        = pick(findCol('MOIC'), 18);
+  const colSharesOut   = pick(findCol('Total Shares Outstanding'), 19);
+  const colOwnership   = pick(findCol('Current Tranche Ownership'), 20);
+  const colVehicleName = findCol('Vehicle Name'); // optional
+  const colStage       = findCol('Stage');        // optional
 
   const tranches: Tranche[] = [];
   for (let i = dataStartRow; i < rows.length; i++) {
     const r = rows[i];
-    const name = (r[1] || '').trim();
+    const name = (r[colName] || '').trim();
     if (!name || name.startsWith('Total') || name === 'Investment') break;
     tranches.push({
       legalName:         name,
-      instrument:        r[2] || '',
-      type:              r[3] || '',
-      investDate:        r[4] || '',
-      investmentAmount:  parseNum(r[6]),
-      postMoneyCap:      parseNum(r[7]),
-      shares:            parseNum(r[8]),
-      issuePrice:        parseNum(r[9]),
-      sharesOwned:       parseNum(r[12]),
-      currentPrice:      parseNum(r[13]),
-      residualValue:     parseNum(r[15]),
-      totalValue:        parseNum(r[16]),
+      instrument:        r[colInstrument] || '',
+      type:              r[colType] || '',
+      investDate:        r[colInvestDate] || '',
+      investmentAmount:  parseNum(r[colAmount]),
+      postMoneyCap:      parseNum(r[colPostMoney]),
+      shares:            parseNum(r[colShares]),
+      issuePrice:        parseNum(r[colIssuePrice]),
+      sharesOwned:       parseNum(r[colSharesOwned]),
+      currentPrice:      parseNum(r[colCurrentPrice]),
+      residualValue:     parseNum(r[colResidual]),
+      totalValue:        parseNum(r[colTotalValue]),
       moic:              parseNum(r[colMOIC]),
       sharesOutstanding: parseNum(r[colSharesOut]),
       currentOwnership:  parsePct(r[colOwnership]),
@@ -202,23 +215,26 @@ export async function GET() {
     const dashRange = 'Sheet1!B3:S100';
     const dashRows = await fetchSheet(DASHBOARD_SHEET_ID, dashRange);
 
-    if (dashRows.length === 0) return NextResponse.json({ companies: [], fundSizes: { ac2: 0, ac3: 0 } });
+    if (dashRows.length === 0) return NextResponse.json({ companies: [], fundSizes: { ac1: 0, ac2: 0, ac3: 0 } });
 
     // ── 2. Fetch the Track Record fund tabs + summary ─────────────────────
-    // All three fund tabs share the same layout:
+    // All fund tabs share the same row structure:
     // Row 1: Fund title, Row 2: subtitle, Row 3: "As of" date, Row 4: blank, Row 5: headers
     // Row 6+: data (company tranches)
     // → array index 5 = first data row when fetching from A1
-    const [f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
+    // (Fund I uses a wider column layout; parseTranches detects this from headers.)
+    const [f1Rows, f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund I'!A1:AR60"),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:W50"),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:W30"),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AH30"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F50"),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100"),
     ]);
 
     // ── 2b. Parse committed capital from Track Record summary tab ────────
-    // Rows contain: ["", "Fund II/III", "Committed Capital: ", "", " $ XX,XXX,XXX "]
+    // Rows contain: ["", "Fund I/II/III", "Committed Capital: ", "", " $ XX,XXX,XXX "]
     // We find rows with "Committed Capital" and read the fund name + value
+    let ac1FundSize = 0;
     let ac2FundSize = 0;
     let ac3FundSize = 0;
     for (const row of trSummaryRows) {
@@ -230,9 +246,11 @@ export async function GET() {
       const fundSize = valueCell ? parseNum(valueCell) : 0;
       if (fundLabel === 'Fund III') ac3FundSize = fundSize;
       else if (fundLabel === 'Fund II') ac2FundSize = fundSize;
+      else if (fundLabel === 'Fund I')  ac1FundSize = fundSize;
     }
 
     // Header row is at index 4 (row 5 in sheet), data starts at index 5 (row 6)
+    const f1Tranches = parseTranches(f1Rows, 4, 5);
     const f2Tranches = parseTranches(f2Rows, 4, 5);
     const f3Tranches = parseTranches(f3Rows, 4, 5);
     const ciTranches = parseTranches(ciRows, 4, 5);
@@ -246,6 +264,7 @@ export async function GET() {
       return map;
     };
 
+    const f1ByName = groupByName(f1Tranches);
     const f2ByName = groupByName(f2Tranches);
     const f3ByName = groupByName(f3Tranches);
     const ciByName = groupByName(ciTranches);
@@ -261,23 +280,26 @@ export async function GET() {
         const legalNames = legalName ? [legalName] : [colloquialName];
 
         // Look up tranches for this company across all matching legal names
+        const f1Company: Tranche[] = [];
         const f2Company: Tranche[] = [];
         const f3Company: Tranche[] = [];
         const ciCompany: Tranche[] = [];
         for (const ln of legalNames) {
+          if (f1ByName[ln]) f1Company.push(...f1ByName[ln]);
           if (f2ByName[ln]) f2Company.push(...f2ByName[ln]);
           if (f3ByName[ln]) f3Company.push(...f3ByName[ln]);
           if (ciByName[ln]) ciCompany.push(...ciByName[ln]);
         }
 
+        const ac1  = aggregateTranches(f1Company);
         const ac2  = aggregateTranches(f2Company);
         const ac3  = aggregateTranches(f3Company);
         const catalyst = aggregateTranches(ciCompany);
 
         // Shares outstanding should be the same across funds for a company
-        const sharesOutstanding = Math.max(ac2.sharesOutstanding, ac3.sharesOutstanding, catalyst.sharesOutstanding);
+        const sharesOutstanding = Math.max(ac1.sharesOutstanding, ac2.sharesOutstanding, ac3.sharesOutstanding, catalyst.sharesOutstanding);
         // Current price: use the highest (most recent priced round)
-        const pricePerShare = Math.max(ac2.currentPrice, ac3.currentPrice, catalyst.currentPrice);
+        const pricePerShare = Math.max(ac1.currentPrice, ac2.currentPrice, ac3.currentPrice, catalyst.currentPrice);
 
         return {
           // Identity from Dashboard sheet
@@ -292,6 +314,14 @@ export async function GET() {
           address:            (row[9] || '').trim(), // Column K: Address
           // Legal name for reference
           legalName:          legalNames[0],
+          // ── AC1 (Fund I) from Track Record ─────────────
+          ac1Investment:      ac1.investment,
+          ac1SafeCap:         ac1.safeCap,
+          ac1Shares:          ac1.shares,
+          ac1CurrentValue:    ac1.currentValue,
+          ac1MOIC:            ac1.moic,
+          ac1Ownership:       ac1.ownership,
+          ac1Tranches:        ac1.tranches,
           // ── AC2 (Fund II) from Track Record ────────────
           ac2Investment:      ac2.investment,
           ac2SafeCap:         ac2.safeCap,
@@ -324,7 +354,7 @@ export async function GET() {
 
     return NextResponse.json({
       companies,
-      fundSizes: { ac2: ac2FundSize, ac3: ac3FundSize },
+      fundSizes: { ac1: ac1FundSize, ac2: ac2FundSize, ac3: ac3FundSize },
     });
   } catch (e) {
     console.error('Portfolio API error:', e);
