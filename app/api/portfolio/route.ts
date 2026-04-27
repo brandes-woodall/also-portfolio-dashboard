@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 
 const parseNum = (s: string) => parseFloat((s || '').replace(/[$,%x ]/g, '')) || 0;
+// Handles both formatted ("5.00%") and unformatted (raw decimal "0.05") values.
 const parsePct = (s: string) => {
-  const cleaned = (s || '').replace(/[% ]/g, '');
-  return parseFloat(cleaned) / 100 || 0;
+  const str = (s || '').trim();
+  if (!str) return 0;
+  if (str.includes('%')) return parseFloat(str.replace(/[% ]/g, '')) / 100 || 0;
+  return parseFloat(str) || 0;
 };
 
 // ── Sheet IDs ────────────────────────────────────────────────────────────────
@@ -15,12 +18,22 @@ const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 // No more hardcoded NAME_MAP needed.
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────
-async function fetchSheet(sheetId: string, range: string) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?key=${API_KEY}`;
+async function fetchSheet(sheetId: string, range: string, unformatted = false) {
+  // UNFORMATTED_VALUE preserves full precision on dollar amounts (no rounding
+  // to whole dollars based on cell display format). We pair it with
+  // FORMATTED_STRING for dates so investDate stays human-readable instead of
+  // becoming a Sheets serial number.
+  const renderOpt = unformatted
+    ? '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING'
+    : '';
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?key=${API_KEY}${renderOpt}`;
   const res = await fetch(url, { next: { revalidate: 0 } });
   if (!res.ok) return [];
   const data = await res.json();
-  return (data.values || []) as string[][];
+  // Unformatted mode returns numbers/booleans; coerce to string so downstream
+  // parsers (parseNum / .trim() / .startsWith()) keep working unchanged.
+  const rows = (data.values || []) as unknown[][];
+  return rows.map(r => r.map(v => v == null ? '' : String(v))) as string[][];
 }
 
 // ── Track Record column layout ───────────────────────────────────────────────
@@ -224,11 +237,11 @@ export async function GET() {
     // → array index 5 = first data row when fetching from A1
     // (Fund I uses a wider column layout; parseTranches detects this from headers.)
     const [f1Rows, f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund I'!A1:AR60"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:W50"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:W30"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AH30"),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100"),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund I'!A1:AR60", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:W50", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:W30", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AH30", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100", true),
     ]);
 
     // ── 2b. Parse committed capital from Track Record summary tab ────────
