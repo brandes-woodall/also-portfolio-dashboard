@@ -79,12 +79,14 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
   const headers = rows[headerRow] || [];
   const aboveRow = headerRow > 0 ? (rows[headerRow - 1] || []) : [];
   const findCol = (...names: string[]): number => {
+    const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
     for (const name of names) {
+      const target = norm(name);
       for (let i = 0; i < headers.length; i++) {
-        if ((headers[i] || '').trim() === name) return i;
+        if (norm(headers[i] || '') === target) return i;
       }
       for (let i = 0; i < aboveRow.length; i++) {
-        if ((aboveRow[i] || '').trim() === name) return i;
+        if (norm(aboveRow[i] || '') === target) return i;
       }
     }
     return -1;
@@ -111,8 +113,8 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
   const colOwnership   = pick(findCol('Current Tranche Ownership'), 20);
   const colVehicleName    = findCol('Vehicle Name');           // optional
   const colStage          = findCol('Stage');                  // optional
-  const colLeadInvestor   = findCol('Lead Investor');          // optional
-  const colCoInvestors    = findCol('Notable Co-Investors');   // optional
+  const colLeadInvestor   = findCol('Lead Investor', 'Lead Investors');
+  const colCoInvestors    = findCol('Notable Co-Investors', 'Notable Co Investors', 'Co-Investors', 'Co Investors', 'Notable CoInvestors');
 
   const tranches: Tranche[] = [];
   for (let i = dataStartRow; i < rows.length; i++) {
