@@ -63,7 +63,7 @@ function InvestorLogo({ firmName }: { firmName: string }) {
           key={version}
           src={`/api/investor-logos/${slug}?v=${version}`}
           alt={firmName}
-          className="h-12 object-contain max-w-[176px]"
+          className="h-9 object-contain max-w-[132px]"
           onError={() => setImgFailed(true)}
         />
       ) : (
@@ -1238,35 +1238,54 @@ export default function CompanyPage() {
                         const leads = (t.leadInvestor || '').split(',').map((s: string) => s.trim()).filter(Boolean);
                         return (
                         <div key={i} className="bg-white rounded p-2.5 border border-gray-100">
-                          <div className="flex items-start gap-2">
-                            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                              {t.stage && (
-                                <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
-                                  {t.stage}
-                                </span>
+                          <div className="flex items-center gap-4">
+                            {/* Left: stage/date + invested */}
+                            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {t.stage && (
+                                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
+                                    {t.stage}
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  {t.investDate && <span>{t.investDate}</span>}
+                                  {(t.type || t.instrument) && <span>· {t.type || t.instrument}</span>}
+                                </div>
+                              </div>
+                              {f.label === 'Catalyst' && t.vehicleName && (
+                                <p className="text-xs text-gray-500">{t.vehicleName}</p>
                               )}
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                {t.investDate && <span>{t.investDate}</span>}
-                                {(t.type || t.instrument) && <span>· {t.type || t.instrument}</span>}
+                              <div className="flex items-center gap-4 text-xs">
+                                <div>
+                                  <span className="text-gray-400">Invested </span>
+                                  <span className="text-gray-700 font-medium">{fmtUSD(t.amount)}</span>
+                                </div>
+                                {t.postMoneyCap > 0 && (
+                                  <div>
+                                    <span className="text-gray-400">Post-Money Valuation </span>
+                                    <span className="text-gray-700 font-medium">{fmtUSDRoundM(t.postMoneyCap)}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
+                            {/* Right: lead investors + co-investors */}
                             {(() => {
                               const coinvestors = (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean);
                               return (leads.length > 0 || coinvestors.length > 0) ? (
-                                <div className="flex flex-col items-end gap-1 ml-auto shrink-0">
+                                <div className="flex flex-col items-end gap-1 shrink-0">
                                   {leads.length > 0 && (
-                                    <div className="flex items-center gap-1 text-xs text-gray-400">
+                                    <div className="flex items-center gap-2 text-xs text-gray-400">
                                       <span>Lead Investor{leads.length > 1 ? 's' : ''}:</span>
                                       {leads.map((name: string, li: number) => (
-                                        <span key={name} className="flex items-center gap-0.5">
-                                          {li > 0 && <span className="mx-0.5">{li === leads.length - 1 ? 'and' : ','}</span>}
+                                        <span key={name} className="flex items-center gap-1.5">
+                                          {li > 0 && <span>{li === leads.length - 1 ? 'and' : ','}</span>}
                                           <InvestorLogo firmName={name} />
                                         </span>
                                       ))}
                                     </div>
                                   )}
                                   {coinvestors.length > 0 && (
-                                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                    <div className="flex items-center gap-3 flex-wrap justify-end">
                                       {coinvestors.map((name: string) => (
                                         <InvestorLogo key={name} firmName={name} />
                                       ))}
@@ -1275,21 +1294,6 @@ export default function CompanyPage() {
                                 </div>
                               ) : null;
                             })()}
-                          </div>
-                          {f.label === 'Catalyst' && t.vehicleName && (
-                            <p className="text-xs text-gray-500 mt-1">{t.vehicleName}</p>
-                          )}
-                          <div className="flex items-center gap-4 mt-1 text-xs">
-                            <div>
-                              <span className="text-gray-400">Invested </span>
-                              <span className="text-gray-700 font-medium">{fmtUSD(t.amount)}</span>
-                            </div>
-                            {t.postMoneyCap > 0 && (
-                              <div>
-                                <span className="text-gray-400">Post-Money Valuation </span>
-                                <span className="text-gray-700 font-medium">{fmtUSDRoundM(t.postMoneyCap)}</span>
-                              </div>
-                            )}
                           </div>
                         </div>
                         );
