@@ -63,7 +63,7 @@ function InvestorLogo({ firmName }: { firmName: string }) {
           key={version}
           src={`/api/investor-logos/${slug}?v=${version}`}
           alt={firmName}
-          className="h-9 object-contain max-w-[132px]"
+          className="h-7 object-contain max-w-[105px]"
           onError={() => setImgFailed(true)}
         />
       ) : (
