@@ -63,7 +63,7 @@ function InvestorLogo({ firmName }: { firmName: string }) {
           key={version}
           src={`/api/investor-logos/${slug}?v=${version}`}
           alt={firmName}
-          className="h-5 object-contain max-w-[80px]"
+          className="h-6 object-contain max-w-[88px]"
           onError={() => setImgFailed(true)}
         />
       ) : (
@@ -1265,7 +1265,7 @@ export default function CompanyPage() {
                           {(() => {
                             const coinvestors = (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean);
                             return coinvestors.length > 0 ? (
-                              <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap mt-1.5 justify-end">
                                 {coinvestors.map((name: string) => (
                                   <InvestorLogo key={name} firmName={name} />
                                 ))}
