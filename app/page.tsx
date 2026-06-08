@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -14,9 +14,10 @@ export default function Home() {
   const [companies, setCompanies]   = useState<Company[]>([]);
   const [fundSizes, setFundSizes]   = useState({ ac1: 0, ac2: 0, ac3: 0 });
   const [loading, setLoading]       = useState(true);
-  const [fundFilter, setFundFilter] = useState('All');
-  const [catFilter, setCatFilter]   = useState('All');
-  const [expanded, setExpanded]     = useState<Set<string>>(new Set());
+  const [fundFilter, setFundFilter]         = useState('All');
+  const [catFilter, setCatFilter]           = useState('All');
+  const [coinvestorFilter, setCoinvestorFilter] = useState('All');
+  const [expanded, setExpanded]             = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch('/api/portfolio')
@@ -109,6 +110,31 @@ export default function Home() {
     return c.ac1Investment + c.ac2Investment + c.ac3Investment + c.catalystInvestment;
   };
 
+  // Collect all unique notable co-investors across every company's tranches
+  const allCoInvestors = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of companies) {
+      const allTranches = [
+        ...(c.ac1Tranches || []),
+        ...(c.ac2Tranches || []),
+        ...(c.ac3Tranches || []),
+        ...(c.catalystTranches || []),
+      ];
+      for (const t of allTranches) {
+        (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean)
+          .forEach((name: string) => set.add(name));
+      }
+    }
+    return Array.from(set).sort();
+  }, [companies]);
+
+  const getAllTranches = (c: Company) => [
+    ...(c.ac1Tranches || []),
+    ...(c.ac2Tranches || []),
+    ...(c.ac3Tranches || []),
+    ...(c.catalystTranches || []),
+  ];
+
   const filtered = companies
     .filter((c) => {
       const fundOk =
@@ -122,7 +148,12 @@ export default function Home() {
         catFilter === 'All' ||
         cat === catFilter.toLowerCase() ||
         (catFilter.toLowerCase() === 'opportunistic' && cat.includes('scout fund'));
-      return fundOk && catOk;
+      const coinvestorOk =
+        coinvestorFilter === 'All' ||
+        getAllTranches(c).some((t) =>
+          (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).includes(coinvestorFilter)
+        );
+      return fundOk && catOk && coinvestorOk;
     })
     .sort((a, b) => investedUnderFilter(b) - investedUnderFilter(a));
 
@@ -273,6 +304,25 @@ export default function Home() {
             {c}
           </button>
         ))}
+        {allCoInvestors.length > 0 && (
+          <>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <select
+              value={coinvestorFilter}
+              onChange={(e) => setCoinvestorFilter(e.target.value)}
+              className={`px-4 py-1.5 rounded-full text-sm border transition-colors cursor-pointer focus:outline-none ${
+                coinvestorFilter !== 'All'
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              <option value="All">Co-Investor</option>
+              {allCoInvestors.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
 
       {/* ── Company Grid ── */}

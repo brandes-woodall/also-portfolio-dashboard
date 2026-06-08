@@ -12,6 +12,8 @@ export interface TrancheDetail {
   moic: number;
   vehicleName: string;
   stage: string;
+  leadInvestor: string;
+  notableCoInvestors: string;
 }
 
 export interface Company {

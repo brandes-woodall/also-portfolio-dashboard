@@ -69,6 +69,8 @@ interface Tranche {
   currentOwnership: number;
   vehicleName: string;
   stage: string;
+  leadInvestor: string;
+  notableCoInvestors: string;
 }
 
 function parseTranches(rows: string[][], headerRow: number, dataStartRow: number): Tranche[] {
@@ -107,8 +109,10 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
   const colMOIC        = pick(findCol('MOIC'), 18);
   const colSharesOut   = pick(findCol('Total Shares Outstanding'), 19);
   const colOwnership   = pick(findCol('Current Tranche Ownership'), 20);
-  const colVehicleName = findCol('Vehicle Name'); // optional
-  const colStage       = findCol('Stage');        // optional
+  const colVehicleName    = findCol('Vehicle Name');           // optional
+  const colStage          = findCol('Stage');                  // optional
+  const colLeadInvestor   = findCol('Lead Investor');          // optional
+  const colCoInvestors    = findCol('Notable Co-Investors');   // optional
 
   const tranches: Tranche[] = [];
   for (let i = dataStartRow; i < rows.length; i++) {
@@ -131,8 +135,10 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
       moic:              parseNum(r[colMOIC]),
       sharesOutstanding: parseNum(r[colSharesOut]),
       currentOwnership:  parsePct(r[colOwnership]),
-      vehicleName:       colVehicleName >= 0 ? (r[colVehicleName] || '').trim() : '',
-      stage:             colStage >= 0 ? (r[colStage] || '').trim() : '',
+      vehicleName:         colVehicleName >= 0 ? (r[colVehicleName] || '').trim() : '',
+      stage:               colStage >= 0 ? (r[colStage] || '').trim() : '',
+      leadInvestor:        colLeadInvestor >= 0 ? (r[colLeadInvestor] || '').trim() : '',
+      notableCoInvestors:  colCoInvestors >= 0 ? (r[colCoInvestors] || '').trim() : '',
     });
   }
   return tranches;
@@ -160,6 +166,8 @@ interface FundSummary {
     moic: number;
     vehicleName: string;
     stage: string;
+    leadInvestor: string;
+    notableCoInvestors: string;
   }[];
 }
 
@@ -204,6 +212,8 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
       moic: t.moic,
       vehicleName: t.vehicleName,
       stage: t.stage,
+      leadInvestor: t.leadInvestor,
+      notableCoInvestors: t.notableCoInvestors,
     };
   });
 
@@ -238,8 +248,8 @@ export async function GET() {
     // (Fund I uses a wider column layout; parseTranches detects this from headers.)
     const [f1Rows, f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund I'!A1:AR60", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:W50", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:W30", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:AB50", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:AB30", true),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AH30", true),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100", true),
     ]);

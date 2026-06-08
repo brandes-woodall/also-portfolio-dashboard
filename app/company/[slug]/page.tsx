@@ -28,6 +28,59 @@ function getEmbedUrl(url: string): string | null {
   return null;
 }
 
+// ── InvestorLogo ─────────────────────────────────────────────────────────────
+// Shows an investor firm's logo if one has been uploaded; falls back to the
+// firm name as text. Click to upload (stored per firm name, shared globally).
+function InvestorLogo({ firmName }: { firmName: string }) {
+  const slug = firmName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const [imgFailed, setImgFailed] = useState(false);
+  const [version, setVersion]     = useState(0);
+  const [hovered, setHovered]     = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    await fetch(`/api/investor-logos/${slug}`, { method: 'POST', body: form });
+    setImgFailed(false);
+    setVersion((v) => v + 1);
+    e.target.value = '';
+  };
+
+  return (
+    <span
+      className="relative inline-flex items-center cursor-pointer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={() => fileRef.current?.click()}
+      title={`Click to upload logo for ${firmName}`}
+    >
+      {!imgFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={version}
+          src={`/api/investor-logos/${slug}?v=${version}`}
+          alt={firmName}
+          className="h-3.5 object-contain max-w-[72px]"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <span className={`text-xs ${hovered ? 'text-amber-600 underline' : 'text-gray-600'} transition-colors`}>
+          {firmName}
+        </span>
+      )}
+      {hovered && !imgFailed && (
+        <span className="absolute inset-0 bg-yellow-50/80 rounded flex items-center justify-center">
+          <span className="text-amber-600 text-[10px]">↑</span>
+        </span>
+      )}
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+    </span>
+  );
+}
+
 // ── EmailModal ───────────────────────────────────────────────────────────────
 function EmailModal({ email, slug, onClose }: { email: Email; slug: string; onClose: () => void }) {
   return (
@@ -1181,18 +1234,33 @@ export default function CompanyPage() {
                   {f.tranches.length > 0 && (
                     <div className="border-t border-gray-200 pt-2 space-y-2">
                       <p className="text-xs text-gray-400 mb-1">Tranches</p>
-                      {f.tranches.map((t, i) => (
+                      {f.tranches.map((t, i) => {
+                        const leads = (t.leadInvestor || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                        return (
                         <div key={i} className="bg-white rounded p-2.5 border border-gray-100">
                           <div className="flex items-center gap-2 flex-wrap">
-                            {t.stage && (
-                              <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
-                                {t.stage}
-                              </span>
-                            )}
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                              {t.investDate && <span>{t.investDate}</span>}
-                              {(t.type || t.instrument) && <span>· {t.type || t.instrument}</span>}
+                            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                              {t.stage && (
+                                <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
+                                  {t.stage}
+                                </span>
+                              )}
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                {t.investDate && <span>{t.investDate}</span>}
+                                {(t.type || t.instrument) && <span>· {t.type || t.instrument}</span>}
+                              </div>
                             </div>
+                            {leads.length > 0 && (
+                              <div className="flex items-center gap-1 text-xs text-gray-400 ml-auto shrink-0">
+                                <span>Lead{leads.length > 1 ? 's' : ''}:</span>
+                                {leads.map((name: string, li: number) => (
+                                  <span key={name} className="flex items-center gap-0.5">
+                                    {li > 0 && <span className="mx-0.5">{li === leads.length - 1 ? 'and' : ','}</span>}
+                                    <InvestorLogo firmName={name} />
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           {f.label === 'Catalyst' && t.vehicleName && (
                             <p className="text-xs text-gray-500 mt-1">{t.vehicleName}</p>
@@ -1210,7 +1278,8 @@ export default function CompanyPage() {
                             )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
