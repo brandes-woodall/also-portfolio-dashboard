@@ -5,7 +5,7 @@ import { simpleParser } from 'mailparser';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'emails');
 
-// GET /api/emails/[slug] — return all emails for a company, sorted newest first
+// GET /api/emails/[slug] — return all emails, sorted by custom order or newest first
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -16,15 +16,33 @@ export async function GET(
     const files = await fs.readdir(dir);
     const emails = await Promise.all(
       files
-        .filter((f) => f.endsWith('.json'))
+        .filter((f) => f.endsWith('.json') && f !== 'order.json')
         .map(async (f) => {
           const raw = await fs.readFile(path.join(dir, f), 'utf-8');
           return JSON.parse(raw);
         })
     );
-    emails.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+
+    // Load custom order if it exists
+    let order: string[] = [];
+    try {
+      const orderRaw = await fs.readFile(path.join(dir, 'order.json'), 'utf-8');
+      order = JSON.parse(orderRaw);
+    } catch { /* no custom order yet */ }
+
+    if (order.length > 0) {
+      const orderMap = new Map(order.map((id, i) => [id, i]));
+      emails.sort((a, b) => {
+        const ai = orderMap.has(a.id) ? orderMap.get(a.id)! : Infinity;
+        const bi = orderMap.has(b.id) ? orderMap.get(b.id)! : Infinity;
+        if (ai === Infinity && bi === Infinity)
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        return ai - bi;
+      });
+    } else {
+      emails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
     return NextResponse.json(emails);
   } catch {
     return NextResponse.json([]);
@@ -101,6 +119,19 @@ export async function POST(
   return NextResponse.json(emailData);
 }
 
+// PATCH /api/emails/[slug] — save a custom display order { order: string[] }
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await params;
+  const { order } = await request.json() as { order: string[] };
+  const dir = path.join(DATA_DIR, slug);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'order.json'), JSON.stringify(order));
+  return NextResponse.json({ success: true });
+}
+
 // DELETE /api/emails/[slug]?id=... — remove a single email and its attachments
 export async function DELETE(
   request: NextRequest,
@@ -113,9 +144,19 @@ export async function DELETE(
     return NextResponse.json({ error: 'id required' }, { status: 400 });
   }
 
-  const file = path.join(DATA_DIR, slug, `${id}.json`);
+  const dir = path.join(DATA_DIR, slug);
+  const file = path.join(dir, `${id}.json`);
   try {
     await fs.unlink(file);
+
+    // Also remove from order.json if present
+    try {
+      const orderFile = path.join(dir, 'order.json');
+      const orderRaw = await fs.readFile(orderFile, 'utf-8');
+      const order = (JSON.parse(orderRaw) as string[]).filter((oid) => oid !== id);
+      await fs.writeFile(orderFile, JSON.stringify(order));
+    } catch { /* no order file, fine */ }
+
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });

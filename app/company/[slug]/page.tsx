@@ -95,6 +95,7 @@ function EmailSection({ slug }: { slug: string }) {
   const [showAll, setShowAll]     = useState(false);
   const [uploading, setUploading] = useState(false);
   const [openEmail, setOpenEmail] = useState<Email | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -114,23 +115,70 @@ function EmailSection({ slug }: { slug: string }) {
     e.target.value = '';
   };
 
+  const saveOrder = async (ordered: Email[]) => {
+    await fetch(`/api/emails/${slug}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: ordered.map((e) => e.id) }),
+    });
+  };
+
+  const moveEmail = async (index: number, direction: 'up' | 'down') => {
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= emails.length) return;
+    const next = [...emails];
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+    setEmails(next);
+    await saveOrder(next);
+  };
+
+  const deleteEmail = async (email: Email) => {
+    if (!confirm(`Remove "${email.subject}"?\n\nThis cannot be undone.`)) return;
+    await fetch(`/api/emails/${slug}?id=${email.id}`, { method: 'DELETE' });
+    setEmails((prev) => prev.filter((e) => e.id !== email.id));
+  };
+
   const visible = showAll ? emails : emails.slice(0, 3);
 
-  const EmailRow = ({ email }: { email: Email }) => (
-    <button
-      key={email.id}
-      onClick={() => setOpenEmail(email)}
-      className="w-full text-left text-xs px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-yellow-50 border border-transparent hover:border-yellow-200 transition-colors"
+  const EmailRow = ({ email, index }: { email: Email; index: number }) => (
+    <div
+      className="flex items-center rounded-lg bg-gray-50 hover:bg-yellow-50 border border-transparent hover:border-yellow-200 transition-colors group"
+      onMouseEnter={() => setHoveredId(email.id)}
+      onMouseLeave={() => setHoveredId(null)}
     >
-      <p className="font-medium text-gray-700 truncate">
-        {email.isPdf && <span className="text-xs font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mr-1.5">PDF</span>}
-        {email.subject}
-      </p>
-      <p className="text-gray-400 mt-0.5 truncate">
-        {email.from ? `${email.from} · ` : ''}
-        {new Date(email.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-      </p>
-    </button>
+      <button
+        onClick={() => setOpenEmail(email)}
+        className="flex-1 min-w-0 text-left text-xs px-3 py-2.5"
+      >
+        <p className="font-medium text-gray-700 truncate">
+          {email.isPdf && <span className="text-xs font-medium text-red-500 bg-red-50 px-1 py-0.5 rounded mr-1.5">PDF</span>}
+          {email.subject}
+        </p>
+        <p className="text-gray-400 mt-0.5 truncate">
+          {email.from ? `${email.from} · ` : ''}
+          {new Date(email.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        </p>
+      </button>
+      <div className={`flex items-center gap-0.5 pr-2 shrink-0 transition-opacity ${hoveredId === email.id ? 'opacity-100' : 'opacity-0'}`}>
+        <button
+          onClick={(e) => { e.stopPropagation(); moveEmail(index, 'up'); }}
+          disabled={index === 0}
+          title="Move up"
+          className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-default leading-none"
+        >↑</button>
+        <button
+          onClick={(e) => { e.stopPropagation(); moveEmail(index, 'down'); }}
+          disabled={index === emails.length - 1}
+          title="Move down"
+          className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-default leading-none"
+        >↓</button>
+        <button
+          onClick={(e) => { e.stopPropagation(); deleteEmail(email); }}
+          title="Remove"
+          className="p-1 ml-0.5 text-gray-300 hover:text-red-500 leading-none"
+        >×</button>
+      </div>
+    </div>
   );
 
   return (
@@ -152,7 +200,10 @@ function EmailSection({ slug }: { slug: string }) {
           <p className="text-xs text-gray-300 py-1">No emails yet</p>
         ) : (
           <div className="space-y-1.5">
-            {visible.map((email) => <EmailRow key={email.id} email={email} />)}
+            {visible.map((email) => {
+              const index = emails.indexOf(email);
+              return <EmailRow key={email.id} email={email} index={index} />;
+            })}
             {emails.length > 3 && (
               <button
                 onClick={() => setShowAll((s) => !s)}
