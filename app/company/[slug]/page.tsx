@@ -1238,7 +1238,7 @@ export default function CompanyPage() {
                         const leads = (t.leadInvestor || '').split(',').map((s: string) => s.trim()).filter(Boolean);
                         return (
                         <div key={i} className="bg-white rounded p-2.5 border border-gray-100">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-start gap-2">
                             <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
                               {t.stage && (
                                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-yellow-50 text-amber-700">
@@ -1250,28 +1250,32 @@ export default function CompanyPage() {
                                 {(t.type || t.instrument) && <span>· {t.type || t.instrument}</span>}
                               </div>
                             </div>
-                            {leads.length > 0 && (
-                              <div className="flex items-center gap-1 text-xs text-gray-400 ml-auto shrink-0">
-                                <span>Lead Investor{leads.length > 1 ? 's' : ''}:</span>
-                                {leads.map((name: string, li: number) => (
-                                  <span key={name} className="flex items-center gap-0.5">
-                                    {li > 0 && <span className="mx-0.5">{li === leads.length - 1 ? 'and' : ','}</span>}
-                                    <InvestorLogo firmName={name} />
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                            {(() => {
+                              const coinvestors = (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                              return (leads.length > 0 || coinvestors.length > 0) ? (
+                                <div className="flex flex-col items-end gap-1 ml-auto shrink-0">
+                                  {leads.length > 0 && (
+                                    <div className="flex items-center gap-1 text-xs text-gray-400">
+                                      <span>Lead Investor{leads.length > 1 ? 's' : ''}:</span>
+                                      {leads.map((name: string, li: number) => (
+                                        <span key={name} className="flex items-center gap-0.5">
+                                          {li > 0 && <span className="mx-0.5">{li === leads.length - 1 ? 'and' : ','}</span>}
+                                          <InvestorLogo firmName={name} />
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {coinvestors.length > 0 && (
+                                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                      {coinvestors.map((name: string) => (
+                                        <InvestorLogo key={name} firmName={name} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
-                          {(() => {
-                            const coinvestors = (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-                            return coinvestors.length > 0 ? (
-                              <div className="flex items-center gap-1.5 flex-wrap mt-1.5 justify-end">
-                                {coinvestors.map((name: string) => (
-                                  <InvestorLogo key={name} firmName={name} />
-                                ))}
-                              </div>
-                            ) : null;
-                          })()}
                           {f.label === 'Catalyst' && t.vehicleName && (
                             <p className="text-xs text-gray-500 mt-1">{t.vehicleName}</p>
                           )}
