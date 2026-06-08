@@ -110,7 +110,7 @@ export default function Home() {
     return c.ac1Investment + c.ac2Investment + c.ac3Investment + c.catalystInvestment;
   };
 
-  // Collect all unique notable co-investors across every company's tranches
+  // Collect all unique investors (leads + co-investors) across every company's tranches
   const allCoInvestors = useMemo(() => {
     const set = new Set<string>();
     for (const c of companies) {
@@ -121,6 +121,8 @@ export default function Home() {
         ...(c.catalystTranches || []),
       ];
       for (const t of allTranches) {
+        (t.leadInvestor || '').split(',').map((s: string) => s.trim()).filter(Boolean)
+          .forEach((name: string) => set.add(name));
         (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean)
           .forEach((name: string) => set.add(name));
       }
@@ -148,10 +150,12 @@ export default function Home() {
         catFilter === 'All' ||
         cat === catFilter.toLowerCase() ||
         (catFilter.toLowerCase() === 'opportunistic' && cat.includes('scout fund'));
+      const splitNames = (csv: string) => (csv || '').split(',').map((s: string) => s.trim());
       const coinvestorOk =
         coinvestorFilter === 'All' ||
         getAllTranches(c).some((t) =>
-          (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).includes(coinvestorFilter)
+          splitNames(t.leadInvestor).includes(coinvestorFilter) ||
+          splitNames(t.notableCoInvestors).includes(coinvestorFilter)
         );
       return fundOk && catOk && coinvestorOk;
     })
