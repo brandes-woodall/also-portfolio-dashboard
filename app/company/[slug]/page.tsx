@@ -99,8 +99,10 @@ function InvestorLogo({ firmName }: { firmName: string }) {
           onError={() => setImgFailed(true)}
         />
         {hovered && !menuOpen && (
-          <span className="absolute inset-0 bg-black/50 rounded flex items-center justify-center px-1">
-            <span className="text-white text-[10px] font-medium leading-tight text-center">{firmName}</span>
+          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
+            <span className="block whitespace-nowrap bg-white border border-gray-200 shadow-md rounded-md px-2 py-1 text-xs font-medium text-gray-800">
+              {firmName}
+            </span>
           </span>
         )}
       </button>

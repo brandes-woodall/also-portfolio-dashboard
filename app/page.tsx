@@ -22,12 +22,12 @@ function LeadLogoSmall({ firmName }: { firmName: string }) {
       <img
         src={`/api/investor-logos/${slug}`}
         alt={firmName}
-        className="h-5 object-contain max-w-[75px]"
+        className="h-4 object-contain max-w-[56px]"
         onError={() => setImgFailed(true)}
       />
       {hovered && (
-        <span className="absolute inset-0 bg-black/55 rounded flex items-center justify-center px-1">
-          <span className="text-white text-[9px] font-medium leading-tight text-center whitespace-nowrap overflow-hidden">
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
+          <span className="block whitespace-nowrap bg-white border border-gray-200 shadow-md rounded-md px-2 py-1 text-xs font-medium text-gray-800">
             {firmName}
           </span>
         </span>
@@ -159,7 +159,9 @@ export default function Home() {
           .forEach((name: string) => set.add(name));
       }
     }
-    return Array.from(set).sort();
+    return Array.from(set)
+      .filter((name) => name.toLowerCase() !== 'also capital')
+      .sort();
   }, [companies]);
 
   const getAllTranches = (c: Company) => [
@@ -435,8 +437,8 @@ export default function Home() {
                     )}
                   </div>
                   {leadNames.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0 max-w-[110px]">
-                      {leadNames.map((name) => (
+                    <div className="flex gap-1 flex-wrap justify-end shrink-0 max-w-[150px]">
+                      {leadNames.slice(0, 6).map((name) => (
                         <LeadLogoSmall key={name} firmName={name} />
                       ))}
                     </div>
