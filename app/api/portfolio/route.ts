@@ -250,9 +250,9 @@ export async function GET() {
     // (Fund I uses a wider column layout; parseTranches detects this from headers.)
     const [f1Rows, f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund I'!A1:AR60", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:AB50", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:AB30", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AH30", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:AJ50", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:AJ30", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AJ30", true),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100", true),
     ]);
 
