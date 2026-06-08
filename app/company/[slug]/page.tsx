@@ -1262,6 +1262,16 @@ export default function CompanyPage() {
                               </div>
                             )}
                           </div>
+                          {(() => {
+                            const coinvestors = (t.notableCoInvestors || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                            return coinvestors.length > 0 ? (
+                              <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                                {coinvestors.map((name: string) => (
+                                  <InvestorLogo key={name} firmName={name} />
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
                           {f.label === 'Catalyst' && t.vehicleName && (
                             <p className="text-xs text-gray-500 mt-1">{t.vehicleName}</p>
                           )}
