@@ -29,14 +29,23 @@ function getEmbedUrl(url: string): string | null {
 }
 
 // ── InvestorLogo ─────────────────────────────────────────────────────────────
-// Shows an investor firm's logo if one has been uploaded; falls back to the
-// firm name as text. Click to upload (stored per firm name, shared globally).
 function InvestorLogo({ firmName }: { firmName: string }) {
   const slug = firmName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const [imgFailed, setImgFailed] = useState(false);
   const [version, setVersion]     = useState(0);
   const [hovered, setHovered]     = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [menuOpen, setMenuOpen]   = useState(false);
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const menuRef  = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,19 +55,42 @@ function InvestorLogo({ firmName }: { firmName: string }) {
     await fetch(`/api/investor-logos/${slug}`, { method: 'POST', body: form });
     setImgFailed(false);
     setVersion((v) => v + 1);
+    setMenuOpen(false);
     e.target.value = '';
   };
 
+  const handleRemove = async () => {
+    await fetch(`/api/investor-logos/${slug}`, { method: 'DELETE' });
+    setImgFailed(true);
+    setMenuOpen(false);
+  };
+
+  // ── Text mode (no logo yet) — click to upload ──────────────────────────────
+  if (imgFailed) {
+    return (
+      <span className="relative inline-flex items-center">
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="text-xs text-gray-600 hover:text-amber-600 transition-colors"
+          title={`Upload logo for ${firmName}`}
+        >
+          {firmName}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+      </span>
+    );
+  }
+
+  // ── Logo mode — hover shows name, click opens replace/remove menu ──────────
   return (
-    <span
-      className="relative inline-flex items-center cursor-pointer"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={() => fileRef.current?.click()}
-      title={`Click to upload logo for ${firmName}`}
-    >
-      {!imgFailed ? (
-        // eslint-disable-next-line @next/next/no-img-element
+    <span className="relative inline-flex items-center">
+      <button
+        onClick={() => setMenuOpen((o) => !o)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        className="relative"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           key={version}
           src={`/api/investor-logos/${slug}?v=${version}`}
@@ -66,16 +98,33 @@ function InvestorLogo({ firmName }: { firmName: string }) {
           className="h-7 object-contain max-w-[105px]"
           onError={() => setImgFailed(true)}
         />
-      ) : (
-        <span className={`text-xs ${hovered ? 'text-amber-600 underline' : 'text-gray-600'} transition-colors`}>
-          {firmName}
-        </span>
+        {hovered && !menuOpen && (
+          <span className="absolute inset-0 bg-black/50 rounded flex items-center justify-center px-1">
+            <span className="text-white text-[10px] font-medium leading-tight text-center">{firmName}</span>
+          </span>
+        )}
+      </button>
+
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          className="absolute right-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-100 py-1 min-w-[130px]"
+        >
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="w-full text-left text-xs px-3 py-1.5 hover:bg-gray-50 text-gray-700"
+          >
+            Replace image
+          </button>
+          <button
+            onClick={handleRemove}
+            className="w-full text-left text-xs px-3 py-1.5 hover:bg-gray-50 text-red-500"
+          >
+            Remove image
+          </button>
+        </div>
       )}
-      {hovered && !imgFailed && (
-        <span className="absolute inset-0 bg-yellow-50/80 rounded flex items-center justify-center">
-          <span className="text-amber-600 text-[10px]">↑</span>
-        </span>
-      )}
+
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
     </span>
   );

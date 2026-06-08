@@ -3,6 +3,38 @@
 import { useEffect, useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+
+// ── Read-only investor logo for dashboard cards ───────────────────────────────
+function LeadLogoSmall({ firmName }: { firmName: string }) {
+  const slug = firmName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const [imgFailed, setImgFailed] = useState(false);
+  const [hovered, setHovered]     = useState(false);
+
+  if (imgFailed) return null;
+
+  return (
+    <span
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/investor-logos/${slug}`}
+        alt={firmName}
+        className="h-5 object-contain max-w-[75px]"
+        onError={() => setImgFailed(true)}
+      />
+      {hovered && (
+        <span className="absolute inset-0 bg-black/55 rounded flex items-center justify-center px-1">
+          <span className="text-white text-[9px] font-medium leading-tight text-center whitespace-nowrap overflow-hidden">
+            {firmName}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
 import {
   Company,
   fmtUSD, fmtUSDFull, fmtPct, fmtMOIC, toSlug,
@@ -347,6 +379,12 @@ export default function Home() {
           const companyOwnership = funds.reduce((s, f) => s + f.ownership, 0);
           const companyMOIC = companyInvested > 0 ? companyValue / companyInvested : 0;
 
+          // Collect unique lead investors across all tranches for this company
+          const leadNames = Array.from(new Set(
+            getAllTranches(company)
+              .flatMap((t) => (t.leadInvestor || '').split(',').map((s: string) => s.trim()).filter(Boolean))
+          ));
+
           return (
             <div
               key={company.name}
@@ -358,7 +396,7 @@ export default function Home() {
                 className="p-5 pb-3 flex flex-col flex-1"
               >
                 {/* Card header */}
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-start gap-3 mb-4">
                   {company.website ? (
                     <a
                       href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
@@ -396,7 +434,13 @@ export default function Home() {
                       </p>
                     )}
                   </div>
-                  <span className="text-gray-300 text-sm shrink-0">→</span>
+                  {leadNames.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0 max-w-[110px]">
+                      {leadNames.map((name) => (
+                        <LeadLogoSmall key={name} firmName={name} />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Tags */}

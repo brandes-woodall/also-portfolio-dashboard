@@ -33,6 +33,23 @@ export async function GET(
   return new NextResponse(null, { status: 404 });
 }
 
+// DELETE /api/investor-logos/[firm] — remove an investor firm's logo
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ firm: string }> }
+) {
+  const { firm } = await params;
+  const safe = firm.replace(/[^a-z0-9-]/g, '');
+
+  for (const ext of Object.keys(MIME)) {
+    try {
+      await fs.unlink(path.join(VOLUME_DIR, `${safe}.${ext}`));
+      return NextResponse.json({ success: true });
+    } catch { /* try next */ }
+  }
+  return NextResponse.json({ success: false });
+}
+
 // POST /api/investor-logos/[firm] — upload a logo for an investor firm
 export async function POST(
   request: NextRequest,
