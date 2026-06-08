@@ -63,7 +63,7 @@ function InvestorLogo({ firmName }: { firmName: string }) {
           key={version}
           src={`/api/investor-logos/${slug}?v=${version}`}
           alt={firmName}
-          className="h-3.5 object-contain max-w-[72px]"
+          className="h-5 object-contain max-w-[80px]"
           onError={() => setImgFailed(true)}
         />
       ) : (
@@ -1252,7 +1252,7 @@ export default function CompanyPage() {
                             </div>
                             {leads.length > 0 && (
                               <div className="flex items-center gap-1 text-xs text-gray-400 ml-auto shrink-0">
-                                <span>Lead{leads.length > 1 ? 's' : ''}:</span>
+                                <span>Lead Investor{leads.length > 1 ? 's' : ''}:</span>
                                 {leads.map((name: string, li: number) => (
                                   <span key={name} className="flex items-center gap-0.5">
                                     {li > 0 && <span className="mx-0.5">{li === leads.length - 1 ? 'and' : ','}</span>}
