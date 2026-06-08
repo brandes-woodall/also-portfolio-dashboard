@@ -10,21 +10,23 @@ function LeadLogoSmall({ firmName }: { firmName: string }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [hovered, setHovered]     = useState(false);
 
-  if (imgFailed) return null;
-
   return (
     <span
       className="relative inline-flex items-center"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/investor-logos/${slug}`}
-        alt={firmName}
-        className="h-4 object-contain max-w-[56px]"
-        onError={() => setImgFailed(true)}
-      />
+      {imgFailed ? (
+        <span className="text-[10px] text-gray-400 leading-tight">{firmName}</span>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={`/api/investor-logos/${slug}`}
+          alt={firmName}
+          className="h-5 object-contain max-w-[70px]"
+          onError={() => setImgFailed(true)}
+        />
+      )}
       {hovered && (
         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
           <span className="block whitespace-nowrap bg-white border border-gray-200 shadow-md rounded-md px-2 py-1 text-xs font-medium text-gray-800">
@@ -437,7 +439,7 @@ export default function Home() {
                     )}
                   </div>
                   {leadNames.length > 0 && (
-                    <div className="flex gap-1 flex-wrap justify-end shrink-0 max-w-[150px]">
+                    <div className="flex gap-1.5 flex-wrap justify-end shrink-0 max-w-[170px]">
                       {leadNames.slice(0, 6).map((name) => (
                         <LeadLogoSmall key={name} firmName={name} />
                       ))}
