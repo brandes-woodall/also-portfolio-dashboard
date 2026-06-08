@@ -965,8 +965,11 @@ function PressSection({ slug }: { slug: string }) {
 export default function CompanyPage() {
   const params = useParams();
   const slug = params.slug as string;
-  const [company, setCompany]   = useState<Company | null>(null);
-  const [loading, setLoading]   = useState(true);
+  const [company, setCompany]       = useState<Company | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [logoKey, setLogoKey]       = useState(0);
+  const [logoHovered, setLogoHovered] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch('/api/portfolio')
@@ -977,6 +980,16 @@ export default function CompanyPage() {
         setLoading(false);
       });
   }, [slug]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    await fetch(`/api/logos/${slug}`, { method: 'POST', body: form });
+    setLogoKey((k) => k + 1);
+    e.target.value = '';
+  };
 
   if (loading) {
     return (
@@ -1026,16 +1039,37 @@ export default function CompanyPage() {
 
       {/* ── Company header ── */}
       <div className="flex items-center gap-4 mb-6">
-        <div className="w-14 h-14 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
-          <Image
-            src={`/logos/${slug}.png`}
+        {/* Logo — click to upload a new image */}
+        <button
+          onClick={() => logoFileRef.current?.click()}
+          onMouseEnter={() => setLogoHovered(true)}
+          onMouseLeave={() => setLogoHovered(false)}
+          title="Upload logo"
+          className="relative w-14 h-14 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden focus:outline-none"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={logoKey}
+            src={`/api/logos/${slug}?v=${logoKey}`}
             alt={company.name}
             width={56}
             height={56}
-            className="object-contain"
+            className="object-contain w-full h-full"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
-        </div>
+          {logoHovered && (
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-xl">
+              <span className="text-white text-lg leading-none">↑</span>
+            </div>
+          )}
+        </button>
+        <input
+          ref={logoFileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+          className="hidden"
+          onChange={handleLogoUpload}
+        />
         <div className="min-w-0 flex-1">
           <h1
             className="text-3xl font-semibold text-gray-900"
