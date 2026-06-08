@@ -233,13 +233,24 @@ export default function Home() {
 
       {/* ── Header ── */}
       <div className="mb-8">
-        <Image
-          src="/logos/also-capital.png"
-          alt="Also Capital"
-          width={160}
-          height={40}
-          className="object-contain mb-3"
-        />
+        <div className="flex items-start justify-between">
+          <Image
+            src="/logos/also-capital.png"
+            alt="Also Capital"
+            width={160}
+            height={40}
+            className="object-contain mb-3"
+          />
+          <Link
+            href="/map"
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-amber-600 transition-colors mt-1"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M8.157 2.175a1.5 1.5 0 0 0-1.147 0l-4.084 1.69A1.5 1.5 0 0 0 2 5.251v10.877a1.5 1.5 0 0 0 2.074 1.386l3.51-1.452 4.26 1.763a1.5 1.5 0 0 0 1.146 0l4.083-1.69A1.5 1.5 0 0 0 18 14.748V3.873a1.5 1.5 0 0 0-2.073-1.386l-3.51 1.452-4.26-1.763ZM7.58 5a.75.75 0 0 1 .75.75v6.5a.75.75 0 0 1-1.5 0v-6.5A.75.75 0 0 1 7.58 5Zm5.59 1.75a.75.75 0 0 0-1.5 0v6.5a.75.75 0 0 0 1.5 0v-6.5Z" clipRule="evenodd" />
+            </svg>
+            Map view
+          </Link>
+        </div>
         <h1
           className="text-4xl font-semibold text-gray-900"
           style={{ fontFamily: 'var(--font-eb-garamond)' }}
