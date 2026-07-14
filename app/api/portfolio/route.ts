@@ -11,7 +11,7 @@ const parsePct = (s: string) => {
 
 // ── Sheet IDs ────────────────────────────────────────────────────────────────
 const DASHBOARD_SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID!;
-const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '16ZO64m6zsnTWsBzQIRBWswxT7GoDV045ps5SBf_QLoU';
+const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1nSd8etGuisML2tUxM0gYyv8tbx-helISuLQeEzhb5Rw';
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 
 // Legal name now comes from Column I of the Portfolio Dashboard sheet.
