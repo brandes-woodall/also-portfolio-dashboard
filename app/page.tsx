@@ -185,7 +185,7 @@ export default function Home() {
       const catOk =
         catFilter === 'All' ||
         cat === catFilter.toLowerCase() ||
-        (catFilter.toLowerCase() === 'opportunistic' && cat.includes('scout fund'));
+        (catFilter.toLowerCase() === 'ecosystem' && cat.includes('scout fund'));
       const splitNames = (csv: string) => (csv || '').split(',').map((s: string) => s.trim());
       const coinvestorOk =
         coinvestorFilter === 'All' ||
@@ -342,7 +342,7 @@ export default function Home() {
           </button>
         ))}
         <div className="w-px h-6 bg-gray-200 mx-1" />
-        {['All', 'Core', 'Opportunistic'].map((c) => (
+        {['All', 'Core', 'Ecosystem'].map((c) => (
           <button
             key={c}
             onClick={() => setCatFilter(c)}
