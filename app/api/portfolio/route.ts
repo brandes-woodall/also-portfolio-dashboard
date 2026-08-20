@@ -150,7 +150,8 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
 interface FundSummary {
   investment: number;
   shares: number;
-  currentValue: number;
+  currentValue: number;   // Total Value (realized + unrealized) — used for MOIC
+  residualValue: number;  // Residual Value (unrealized only) — used for AUM
   moic: number;
   ownership: number;
   sharesOutstanding: number;
@@ -175,12 +176,13 @@ interface FundSummary {
 
 function aggregateTranches(tranches: Tranche[]): FundSummary {
   if (tranches.length === 0) {
-    return { investment: 0, shares: 0, currentValue: 0, moic: 0, ownership: 0, sharesOutstanding: 0, currentPrice: 0, safeCap: 0, tranches: [] };
+    return { investment: 0, shares: 0, currentValue: 0, residualValue: 0, moic: 0, ownership: 0, sharesOutstanding: 0, currentPrice: 0, safeCap: 0, tranches: [] };
   }
 
   let totalInvestment = 0;
   let totalShares = 0;
   let totalValue = 0;
+  let totalResidual = 0;
   let totalOwnership = 0;
   // Use the largest shares outstanding value (they should all be the same for a company)
   let sharesOutstanding = 0;
@@ -193,6 +195,7 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
     totalInvestment += t.investmentAmount;
     totalShares += t.sharesOwned;
     totalValue += t.totalValue;
+    totalResidual += t.residualValue;
     totalOwnership += t.currentOwnership;
     if (t.sharesOutstanding > sharesOutstanding) sharesOutstanding = t.sharesOutstanding;
     if (t.currentPrice > 0) currentPrice = t.currentPrice;
@@ -225,6 +228,7 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
     investment: totalInvestment,
     shares: totalShares,
     currentValue: totalValue,
+    residualValue: totalResidual,
     moic,
     ownership: totalOwnership,
     sharesOutstanding,
@@ -349,6 +353,7 @@ export async function GET() {
           ac1SafeCap:         ac1.safeCap,
           ac1Shares:          ac1.shares,
           ac1CurrentValue:    ac1.currentValue,
+          ac1ResidualValue:   ac1.residualValue,
           ac1MOIC:            ac1.moic,
           ac1Ownership:       ac1.ownership,
           ac1Tranches:        ac1.tranches,
@@ -357,6 +362,7 @@ export async function GET() {
           ac2SafeCap:         ac2.safeCap,
           ac2Shares:          ac2.shares,
           ac2CurrentValue:    ac2.currentValue,
+          ac2ResidualValue:   ac2.residualValue,
           ac2MOIC:            ac2.moic,
           ac2Ownership:       ac2.ownership,
           ac2Tranches:        ac2.tranches,
@@ -365,17 +371,19 @@ export async function GET() {
           ac3SafeCap:         ac3.safeCap,
           ac3Shares:          ac3.shares,
           ac3CurrentValue:    ac3.currentValue,
+          ac3ResidualValue:   ac3.residualValue,
           ac3MOIC:            ac3.moic,
           ac3Ownership:       ac3.ownership,
           ac3Tranches:        ac3.tranches,
           // ── Catalyst (Co-Investments) from Track Record ─
-          catalystInvestment: catalyst.investment,
-          catalystSafeCap:    catalyst.safeCap,
-          catalystShares:     catalyst.shares,
-          catalystCurrentValue: catalyst.currentValue,
-          catalystMOIC:       catalyst.moic,
-          catalystOwnership:  catalyst.ownership,
-          catalystTranches:   catalyst.tranches,
+          catalystInvestment:    catalyst.investment,
+          catalystSafeCap:       catalyst.safeCap,
+          catalystShares:        catalyst.shares,
+          catalystCurrentValue:  catalyst.currentValue,
+          catalystResidualValue: catalyst.residualValue,
+          catalystMOIC:          catalyst.moic,
+          catalystOwnership:     catalyst.ownership,
+          catalystTranches:      catalyst.tranches,
           // ── Shared ─────────────────────────────────────
           pricePerShare,
           sharesOutstanding,

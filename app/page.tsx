@@ -74,18 +74,18 @@ export default function Home() {
   for (const c of companies) {
     if (c.ac1Investment) {
       ac1Invested += c.ac1Investment;
-      ac1Value    += c.ac1CurrentValue;
+      ac1Value    += c.ac1ResidualValue;  // Residual Value (unrealized) for AUM
     }
     if (c.ac2Investment) {
       ac2Invested += c.ac2Investment;
-      ac2Value    += c.ac2CurrentValue;
+      ac2Value    += c.ac2ResidualValue;
     }
     if (c.ac3Investment) {
       ac3Invested += c.ac3Investment;
-      ac3Value    += c.ac3CurrentValue;
+      ac3Value    += c.ac3ResidualValue;
     }
     if (c.catalystInvestment) {
-      catalystValue += c.catalystCurrentValue;
+      catalystValue += c.catalystResidualValue;
     }
   }
   // For AC1, only treat it as a fund (with undeployed capital) when a committed

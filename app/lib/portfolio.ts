@@ -32,6 +32,7 @@ export interface Company {
   ac1SafeCap: number;
   ac1Shares: number;
   ac1CurrentValue: number;
+  ac1ResidualValue: number;
   ac1MOIC: number;
   ac1Ownership: number;
   ac1Tranches: TrancheDetail[];
@@ -40,6 +41,7 @@ export interface Company {
   ac2SafeCap: number;
   ac2Shares: number;
   ac2CurrentValue: number;
+  ac2ResidualValue: number;
   ac2MOIC: number;
   ac2Ownership: number;
   ac2Tranches: TrancheDetail[];
@@ -48,6 +50,7 @@ export interface Company {
   ac3SafeCap: number;
   ac3Shares: number;
   ac3CurrentValue: number;
+  ac3ResidualValue: number;
   ac3MOIC: number;
   ac3Ownership: number;
   ac3Tranches: TrancheDetail[];
@@ -56,6 +59,7 @@ export interface Company {
   catalystSafeCap: number;
   catalystShares: number;
   catalystCurrentValue: number;
+  catalystResidualValue: number;
   catalystMOIC: number;
   catalystOwnership: number;
   catalystTranches: TrancheDetail[];
