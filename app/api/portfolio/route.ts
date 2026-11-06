@@ -351,77 +351,43 @@ export async function GET() {
         fetchCompanyLeads(),
       ]);
 
-    // ── 2b. Parse AUM breakdown from Track Record summary tab ─────────────
-    // Each fund header row contains "Committed Capital:" or "Paid-In Capital:"
-    //   col B (idx 1) = fund label
-    //   first positive value at idx 3+ = committed / paid-in capital
-    //   col J (idx 9) = Total Invested Capital
-    //   col N (idx 13) = Remaining Value of Invested
-    // FUND-LEVEL AUM = Remaining Value + max(0, Committed − Invested)
-    interface FundAUMRow {
-      label: string;
-      committed: number;
-      invested: number;
-      uninvested: number;
-      remainingValue: number;
-      fundAUM: number;
-    }
+    // ── 2b. Parse committed capital from Track Record summary tab ─────────
+    // Scan every cell in every row for fund labels, then look for the
+    // "Committed Capital" / "Paid-In Capital" row that follows each label.
+    // Committed capital is the first value > $1 M found on that row.
+    // (Invested and Remaining Value come from the per-fund tranche data below,
+    //  which is already parsed from the same Track Record fund tabs.)
+    const FUND_KEY_MAP: Record<string, string> = {
+      'Fund III': 'ac3', 'AC 3': 'ac3', 'AC3': 'ac3',
+      'Fund II':  'ac2', 'AC 2': 'ac2', 'AC2': 'ac2',
+      'Fund I':   'ac1', 'AC "1"': 'ac1', 'AC1': 'ac1',
+      'C 0': 'catalyst', 'C "0"': 'catalyst',
+      'Co-Investments': 'catalyst', 'Co-Investment': 'catalyst',
+      'Catalyst': 'catalyst', 'Catalyst 0': 'catalyst',
+      'ACES "0"': 'aces0', 'ACES 0': 'aces0',
+      'ACES 1': 'aces1',
+    };
 
-    const fundAUMMap: Record<string, FundAUMRow> = {};
-    let ac1FundSize   = 0;
-    let ac2FundSize   = 0;
-    let ac3FundSize   = 0;
-    let aces0FundSize = 0;
-    let aces1FundSize = 0;
+    let currentFundKey = '';
+    const committedMap: Record<string, number> = {};
 
     for (const row of trSummaryRows) {
-      const hasCapital = row.some(
-        cell => (cell || '').includes('Committed Capital') || (cell || '').includes('Paid-In Capital')
+      // Identify a fund label anywhere in the row
+      for (const cell of row) {
+        const c = (cell || '').trim();
+        if (FUND_KEY_MAP[c]) { currentFundKey = FUND_KEY_MAP[c]; break; }
+      }
+      // Check if this row declares a committed / paid-in capital amount
+      const hasCapital = row.some(c =>
+        (c || '').includes('Committed Capital') || (c || '').includes('Paid-In Capital')
       );
-      if (!hasCapital) continue;
-
-      const fundLabel = (row[1] || '').trim();
-
-      // Find committed/paid-in capital: first positive number starting at col D (idx 3)
-      let committed = 0;
-      for (let idx = 3; idx <= 8; idx++) {
-        const v = parseNum(row[idx] || '');
-        if (v > 0) { committed = v; break; }
-      }
-
-      const invested   = parseNum(row[9]  || '');   // col J
-      const rv         = parseNum(row[13] || '');   // col N
-      const uninvested = Math.max(0, committed - invested);
-      const fundAUM    = rv + uninvested;
-
-      let key = '';
-      let displayLabel = '';
-
-      if (fundLabel === 'Fund III' || fundLabel === 'AC 3') {
-        key = 'ac3'; displayLabel = 'AC3'; ac3FundSize = committed;
-      } else if (fundLabel === 'Fund II' || fundLabel === 'AC 2') {
-        key = 'ac2'; displayLabel = 'AC2'; ac2FundSize = committed;
-      } else if (fundLabel === 'Fund I' || fundLabel === 'AC "1"') {
-        key = 'ac1'; displayLabel = 'AC1'; ac1FundSize = committed;
-      } else if (
-        ['C 0','C "0"','Co-Investments','Co-Investment','Catalyst','Catalyst 0'].includes(fundLabel)
-      ) {
-        key = 'catalyst'; displayLabel = 'Catalyst 0';
-      } else if (fundLabel === 'ACES "0"' || fundLabel === 'ACES 0') {
-        key = 'aces0'; displayLabel = 'ACES 0'; aces0FundSize = committed;
-      } else if (fundLabel === 'ACES 1') {
-        key = 'aces1'; displayLabel = 'ACES 1'; aces1FundSize = committed;
-      }
-
-      if (key) {
-        fundAUMMap[key] = { label: displayLabel, committed, invested, uninvested, remainingValue: rv, fundAUM };
+      if (hasCapital && currentFundKey && !committedMap[currentFundKey]) {
+        for (const cell of row) {
+          const v = parseNum(cell || '');
+          if (v > 1_000_000) { committedMap[currentFundKey] = v; break; }
+        }
       }
     }
-
-    // Ordered array for the hover table (totals computed on the frontend)
-    const fundAUMBreakdown: FundAUMRow[] = (['ac1','ac2','ac3','catalyst','aces0','aces1'] as const)
-      .filter(k => fundAUMMap[k])
-      .map(k => fundAUMMap[k]);
 
     // ── 2c. Parse fund tranches ───────────────────────────────────────────
     // Header row is at index 4 (row 5 in sheet), data starts at index 5 (row 6)
@@ -431,6 +397,53 @@ export async function GET() {
     const ciTranches    = parseTranches(ciRows,    4, 5);
     const aces0Tranches = parseTranches(aces0Rows, 4, 5);
     const aces1Tranches = parseTranches(aces1Rows, 4, 5);
+
+    // ── 2d. Build fund-level AUM breakdown ───────────────────────────────
+    // Invested and Remaining Value are summed directly from the parsed tranches
+    // (same data source as Track Record col J / col N; avoids column-index guessing
+    //  on the summary tab whose layout we don't fully control).
+    const fundInvested: Record<string, number> = {
+      ac1:      f1Tranches.reduce((s, t) => s + t.investmentAmount, 0),
+      ac2:      f2Tranches.reduce((s, t) => s + t.investmentAmount, 0),
+      ac3:      f3Tranches.reduce((s, t) => s + t.investmentAmount, 0),
+      catalyst: ciTranches.reduce((s, t) => s + t.investmentAmount, 0),
+      aces0:    aces0Tranches.reduce((s, t) => s + t.investmentAmount, 0),
+      aces1:    aces1Tranches.reduce((s, t) => s + t.investmentAmount, 0),
+    };
+    const fundRV: Record<string, number> = {
+      ac1:      f1Tranches.reduce((s, t) => s + t.residualValue, 0),
+      ac2:      f2Tranches.reduce((s, t) => s + t.residualValue, 0),
+      ac3:      f3Tranches.reduce((s, t) => s + t.residualValue, 0),
+      catalyst: ciTranches.reduce((s, t) => s + t.residualValue, 0),
+      aces0:    aces0Tranches.reduce((s, t) => s + t.residualValue, 0),
+      aces1:    aces1Tranches.reduce((s, t) => s + t.residualValue, 0),
+    };
+    const FUND_DISPLAY: Record<string, string> = {
+      ac1: 'AC1', ac2: 'AC2', ac3: 'AC3',
+      catalyst: 'Catalyst 0', aces0: 'ACES 0', aces1: 'ACES 1',
+    };
+
+    interface FundAUMRow {
+      label: string; committed: number; invested: number;
+      uninvested: number; remainingValue: number; fundAUM: number;
+    }
+    const fundAUMBreakdown: FundAUMRow[] = (
+      ['ac1','ac2','ac3','catalyst','aces0','aces1'] as const
+    )
+      .filter(k => (fundInvested[k] || 0) > 0 || (committedMap[k] || 0) > 0)
+      .map(k => {
+        const committed  = committedMap[k] || 0;
+        const invested   = fundInvested[k] || 0;
+        const rv         = fundRV[k] || 0;
+        const uninvested = Math.max(0, committed - invested);
+        return { label: FUND_DISPLAY[k], committed, invested, uninvested, remainingValue: rv, fundAUM: rv + uninvested };
+      });
+
+    const ac1FundSize   = committedMap['ac1']   || 0;
+    const ac2FundSize   = committedMap['ac2']   || 0;
+    const ac3FundSize   = committedMap['ac3']   || 0;
+    const aces0FundSize = committedMap['aces0'] || 0;
+    const aces1FundSize = committedMap['aces1'] || 0;
 
     // ── 3. Group tranches by legal name per fund ──────────────────────────
     const groupByName = (tranches: Tranche[]) => {
