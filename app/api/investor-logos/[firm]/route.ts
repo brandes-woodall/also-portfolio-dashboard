@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { sharedLogo } from '@/app/lib/sharedLogos';
 
 const VOLUME_DIR = path.join(process.cwd(), 'data', 'investor-logos');
 
@@ -28,6 +29,14 @@ export async function GET(
         headers: { 'Content-Type': mime, 'Cache-Control': 'no-cache' },
       });
     } catch { /* try next */ }
+  }
+
+  // Fall back to the shared Also Logos folder
+  const shared = await sharedLogo('investors', safe);
+  if (shared) {
+    return new NextResponse(new Uint8Array(shared.buf), {
+      headers: { 'Content-Type': shared.mime, 'Cache-Control': 'public, max-age=3600' },
+    });
   }
 
   return new NextResponse(null, { status: 404 });

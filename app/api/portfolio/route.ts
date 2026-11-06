@@ -11,7 +11,7 @@ const parsePct = (s: string) => {
 
 // ── Sheet IDs ────────────────────────────────────────────────────────────────
 const DASHBOARD_SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID!;
-const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1nSd8etGuisML2tUxM0gYyv8tbx-helISuLQeEzhb5Rw';
+const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1CzUwhToTXvBx-ott14vSY4_ebRPD48DPuVTSIUgNRdw';
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 
 // Legal name now comes from Column I of the Portfolio Dashboard sheet.
@@ -244,50 +244,48 @@ export async function GET() {
     const dashRange = 'Sheet1!B3:S100';
     const dashRows = await fetchSheet(DASHBOARD_SHEET_ID, dashRange);
 
-    if (dashRows.length === 0) return NextResponse.json({ companies: [], fundSizes: { ac1: 0, ac2: 0, ac3: 0 } });
+    if (dashRows.length === 0) return NextResponse.json({ companies: [], fundSizes: { ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 } });
 
     // ── 2. Fetch the Track Record fund tabs + summary ─────────────────────
-    // All fund tabs share the same row structure:
-    // Row 1: Fund title, Row 2: subtitle, Row 3: "As of" date, Row 4: blank, Row 5: headers
-    // Row 6+: data (company tranches)
-    // → array index 5 = first data row when fetching from A1
-    // (Fund I uses a wider column layout; parseTranches detects this from headers.)
-    const [f1Rows, f2Rows, f3Rows, ciRows, trSummaryRows] = await Promise.all([
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund I'!A1:AR60", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund II'!A1:AJ50", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Fund III'!A1:AJ75", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Co-Investments'!A1:AQ30", true),
+    const [f1Rows, f2Rows, f3Rows, ciRows, aces0Rows, aces1Rows, trSummaryRows] = await Promise.all([
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'AC \"1\"'!A1:AR60", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'AC 2'!A1:AJ50", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'AC 3'!A1:AJ75", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'C 0'!A1:AQ30", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'ACES \"0\"'!A1:AQ50", true),
+      fetchSheet(TRACK_RECORD_SHEET_ID, "'ACES 1'!A1:AQ50", true),
       fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100", true),
     ]);
 
     // ── 2b. Parse committed capital from Track Record summary tab ────────
-    // Rows contain: ["", "Fund I/II/III", "Committed Capital: ", "", " $ XX,XXX,XXX "]
-    // We find rows with "Committed Capital" and read the fund name + value
     let ac1FundSize = 0;
     let ac2FundSize = 0;
     let ac3FundSize = 0;
+    let aces0FundSize = 0;
+    let aces1FundSize = 0;
     for (const row of trSummaryRows) {
       const hasCommitted = row.some(cell => (cell || '').includes('Committed Capital'));
       if (!hasCommitted) continue;
       const fundLabel = (row[1] || '').trim();
-      // The value is the first numeric cell after column 2. We look for any
-      // parseable positive number rather than a leading "$" so this works with
-      // both FORMATTED ("$22,000,000") and UNFORMATTED ("22000000") fetches.
       let fundSize = 0;
       for (let idx = 3; idx < row.length; idx++) {
         const v = parseNum(row[idx] || '');
         if (v > 0) { fundSize = v; break; }
       }
-      if (fundLabel === 'Fund III') ac3FundSize = fundSize;
-      else if (fundLabel === 'Fund II') ac2FundSize = fundSize;
-      else if (fundLabel === 'Fund I')  ac1FundSize = fundSize;
+      if      (fundLabel === 'Fund III' || fundLabel === 'AC 3')   ac3FundSize   = fundSize;
+      else if (fundLabel === 'Fund II'  || fundLabel === 'AC 2')   ac2FundSize   = fundSize;
+      else if (fundLabel === 'Fund I'   || fundLabel === 'AC "1"') ac1FundSize   = fundSize;
+      else if (fundLabel === 'ACES "0"' || fundLabel === 'ACES 0') aces0FundSize = fundSize;
+      else if (fundLabel === 'ACES 1')                              aces1FundSize = fundSize;
     }
 
     // Header row is at index 4 (row 5 in sheet), data starts at index 5 (row 6)
-    const f1Tranches = parseTranches(f1Rows, 4, 5);
-    const f2Tranches = parseTranches(f2Rows, 4, 5);
-    const f3Tranches = parseTranches(f3Rows, 4, 5);
-    const ciTranches = parseTranches(ciRows, 4, 5);
+    const f1Tranches    = parseTranches(f1Rows,    4, 5);
+    const f2Tranches    = parseTranches(f2Rows,    4, 5);
+    const f3Tranches    = parseTranches(f3Rows,    4, 5);
+    const ciTranches    = parseTranches(ciRows,    4, 5);
+    const aces0Tranches = parseTranches(aces0Rows, 4, 5);
+    const aces1Tranches = parseTranches(aces1Rows, 4, 5);
 
     // ── 3. Group tranches by legal name per fund ─────────────────────────
     const groupByName = (tranches: Tranche[]) => {
@@ -298,10 +296,12 @@ export async function GET() {
       return map;
     };
 
-    const f1ByName = groupByName(f1Tranches);
-    const f2ByName = groupByName(f2Tranches);
-    const f3ByName = groupByName(f3Tranches);
-    const ciByName = groupByName(ciTranches);
+    const f1ByName    = groupByName(f1Tranches);
+    const f2ByName    = groupByName(f2Tranches);
+    const f3ByName    = groupByName(f3Tranches);
+    const ciByName    = groupByName(ciTranches);
+    const aces0ByName = groupByName(aces0Tranches);
+    const aces1ByName = groupByName(aces1Tranches);
 
     // ── 4. Merge dashboard rows with Track Record data ───────────────────
     const companies = dashRows
@@ -309,34 +309,35 @@ export async function GET() {
       .filter((row: string[]) => row[0])
       .map((row: string[]) => {
         const colloquialName = row[0] || '';
-        // Range starts at Column B, so B=0, C=1, ... I=7, J=8
-        const legalName = (row[7] || '').trim(); // Column I: Legal Name
+        const legalName = (row[7] || '').trim();
         const legalNames = legalName ? [legalName] : [colloquialName];
 
-        // Look up tranches for this company across all matching legal names
-        const f1Company: Tranche[] = [];
-        const f2Company: Tranche[] = [];
-        const f3Company: Tranche[] = [];
-        const ciCompany: Tranche[] = [];
+        const f1Company: Tranche[]    = [];
+        const f2Company: Tranche[]    = [];
+        const f3Company: Tranche[]    = [];
+        const ciCompany: Tranche[]    = [];
+        const aces0Company: Tranche[] = [];
+        const aces1Company: Tranche[] = [];
         for (const ln of legalNames) {
-          if (f1ByName[ln]) f1Company.push(...f1ByName[ln]);
-          if (f2ByName[ln]) f2Company.push(...f2ByName[ln]);
-          if (f3ByName[ln]) f3Company.push(...f3ByName[ln]);
-          if (ciByName[ln]) ciCompany.push(...ciByName[ln]);
+          if (f1ByName[ln])    f1Company.push(...f1ByName[ln]);
+          if (f2ByName[ln])    f2Company.push(...f2ByName[ln]);
+          if (f3ByName[ln])    f3Company.push(...f3ByName[ln]);
+          if (ciByName[ln])    ciCompany.push(...ciByName[ln]);
+          if (aces0ByName[ln]) aces0Company.push(...aces0ByName[ln]);
+          if (aces1ByName[ln]) aces1Company.push(...aces1ByName[ln]);
         }
 
-        const ac1  = aggregateTranches(f1Company);
-        const ac2  = aggregateTranches(f2Company);
-        const ac3  = aggregateTranches(f3Company);
+        const ac1     = aggregateTranches(f1Company);
+        const ac2     = aggregateTranches(f2Company);
+        const ac3     = aggregateTranches(f3Company);
         const catalyst = aggregateTranches(ciCompany);
+        const aces0   = aggregateTranches(aces0Company);
+        const aces1   = aggregateTranches(aces1Company);
 
-        // Shares outstanding should be the same across funds for a company
-        const sharesOutstanding = Math.max(ac1.sharesOutstanding, ac2.sharesOutstanding, ac3.sharesOutstanding, catalyst.sharesOutstanding);
-        // Current price: use the highest (most recent priced round)
-        const pricePerShare = Math.max(ac1.currentPrice, ac2.currentPrice, ac3.currentPrice, catalyst.currentPrice);
+        const sharesOutstanding = Math.max(ac1.sharesOutstanding, ac2.sharesOutstanding, ac3.sharesOutstanding, catalyst.sharesOutstanding, aces0.sharesOutstanding, aces1.sharesOutstanding);
+        const pricePerShare = Math.max(ac1.currentPrice, ac2.currentPrice, ac3.currentPrice, catalyst.currentPrice, aces0.currentPrice, aces1.currentPrice);
 
         return {
-          // Identity from Dashboard sheet
           name:               colloquialName,
           foundingTeam:       row[1] || '',
           linkedin:           row[2] || '',
@@ -344,11 +345,10 @@ export async function GET() {
           website:            row[4] || '',
           fund:               row[5] || '',
           category:           row[6] || '',
-          currentStage:       (row[8] || '').trim(), // Column J: Current Stage
-          address:            (row[9] || '').trim(), // Column K: Address
-          // Legal name for reference
+          currentStage:       (row[8] || '').trim(),
+          address:            (row[9] || '').trim(),
           legalName:          legalNames[0],
-          // ── AC1 (Fund I) from Track Record ─────────────
+          // ── AC1 ────────────────────────────────────────
           ac1Investment:      ac1.investment,
           ac1SafeCap:         ac1.safeCap,
           ac1Shares:          ac1.shares,
@@ -357,7 +357,7 @@ export async function GET() {
           ac1MOIC:            ac1.moic,
           ac1Ownership:       ac1.ownership,
           ac1Tranches:        ac1.tranches,
-          // ── AC2 (Fund II) from Track Record ────────────
+          // ── AC2 ────────────────────────────────────────
           ac2Investment:      ac2.investment,
           ac2SafeCap:         ac2.safeCap,
           ac2Shares:          ac2.shares,
@@ -366,7 +366,7 @@ export async function GET() {
           ac2MOIC:            ac2.moic,
           ac2Ownership:       ac2.ownership,
           ac2Tranches:        ac2.tranches,
-          // ── AC3 (Fund III) from Track Record ───────────
+          // ── AC3 ────────────────────────────────────────
           ac3Investment:      ac3.investment,
           ac3SafeCap:         ac3.safeCap,
           ac3Shares:          ac3.shares,
@@ -375,7 +375,7 @@ export async function GET() {
           ac3MOIC:            ac3.moic,
           ac3Ownership:       ac3.ownership,
           ac3Tranches:        ac3.tranches,
-          // ── Catalyst (Co-Investments) from Track Record ─
+          // ── Catalyst ───────────────────────────────────
           catalystInvestment:    catalyst.investment,
           catalystSafeCap:       catalyst.safeCap,
           catalystShares:        catalyst.shares,
@@ -384,6 +384,24 @@ export async function GET() {
           catalystMOIC:          catalyst.moic,
           catalystOwnership:     catalyst.ownership,
           catalystTranches:      catalyst.tranches,
+          // ── ACES 0 ─────────────────────────────────────
+          aces0Investment:    aces0.investment,
+          aces0SafeCap:       aces0.safeCap,
+          aces0Shares:        aces0.shares,
+          aces0CurrentValue:  aces0.currentValue,
+          aces0ResidualValue: aces0.residualValue,
+          aces0MOIC:          aces0.moic,
+          aces0Ownership:     aces0.ownership,
+          aces0Tranches:      aces0.tranches,
+          // ── ACES 1 ─────────────────────────────────────
+          aces1Investment:    aces1.investment,
+          aces1SafeCap:       aces1.safeCap,
+          aces1Shares:        aces1.shares,
+          aces1CurrentValue:  aces1.currentValue,
+          aces1ResidualValue: aces1.residualValue,
+          aces1MOIC:          aces1.moic,
+          aces1Ownership:     aces1.ownership,
+          aces1Tranches:      aces1.tranches,
           // ── Shared ─────────────────────────────────────
           pricePerShare,
           sharesOutstanding,
@@ -392,7 +410,7 @@ export async function GET() {
 
     return NextResponse.json({
       companies,
-      fundSizes: { ac1: ac1FundSize, ac2: ac2FundSize, ac3: ac3FundSize },
+      fundSizes: { ac1: ac1FundSize, ac2: ac2FundSize, ac3: ac3FundSize, aces0: aces0FundSize, aces1: aces1FundSize },
     });
   } catch (e) {
     console.error('Portfolio API error:', e);

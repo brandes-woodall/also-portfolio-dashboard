@@ -1123,6 +1123,8 @@ export default function CompanyPage() {
     { label: 'AC2',      investment: company.ac2Investment,      value: company.ac2CurrentValue,      moic: company.ac2MOIC,      ownership: company.ac2Ownership,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap,      tranches: company.ac2Tranches || []      },
     { label: 'AC3',      investment: company.ac3Investment,      value: company.ac3CurrentValue,      moic: company.ac3MOIC,      ownership: company.ac3Ownership,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap,      tranches: company.ac3Tranches || []      },
     { label: 'Catalyst', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap, tranches: company.catalystTranches || [] },
+    { label: 'ACES 0',  investment: company.aces0Investment,    value: company.aces0CurrentValue,    moic: company.aces0MOIC,    ownership: company.aces0Ownership,    shares: company.aces0Shares,    safeCap: company.aces0SafeCap,    tranches: company.aces0Tranches || []    },
+    { label: 'ACES 1',  investment: company.aces1Investment,    value: company.aces1CurrentValue,    moic: company.aces1MOIC,    ownership: company.aces1Ownership,    shares: company.aces1Shares,    safeCap: company.aces1SafeCap,    tranches: company.aces1Tranches || []    },
   ].filter((f) => f.investment > 0);
 
   const companyInvested  = funds.reduce((s, f) => s + f.investment, 0);

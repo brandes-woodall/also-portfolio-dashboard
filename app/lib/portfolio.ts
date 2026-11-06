@@ -63,6 +63,24 @@ export interface Company {
   catalystMOIC: number;
   catalystOwnership: number;
   catalystTranches: TrancheDetail[];
+  // ── ACES 0 ────────────────────────────
+  aces0Investment: number;
+  aces0SafeCap: number;
+  aces0Shares: number;
+  aces0CurrentValue: number;
+  aces0ResidualValue: number;
+  aces0MOIC: number;
+  aces0Ownership: number;
+  aces0Tranches: TrancheDetail[];
+  // ── ACES 1 ────────────────────────────
+  aces1Investment: number;
+  aces1SafeCap: number;
+  aces1Shares: number;
+  aces1CurrentValue: number;
+  aces1ResidualValue: number;
+  aces1MOIC: number;
+  aces1Ownership: number;
+  aces1Tranches: TrancheDetail[];
   // ── Shared ────────────────────────────
   pricePerShare: number;
   sharesOutstanding: number;
