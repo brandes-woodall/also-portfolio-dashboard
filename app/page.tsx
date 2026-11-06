@@ -45,9 +45,19 @@ import {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function Home() {
-  const [companies, setCompanies]   = useState<Company[]>([]);
-  const [fundSizes, setFundSizes]   = useState({ ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 });
-  const [loading, setLoading]       = useState(true);
+  type FundAUMRow = {
+    label: string;
+    committed: number;
+    invested: number;
+    uninvested: number;
+    remainingValue: number;
+    fundAUM: number;
+  };
+
+  const [companies, setCompanies]           = useState<Company[]>([]);
+  const [fundSizes, setFundSizes]           = useState({ ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 });
+  const [fundAUMBreakdown, setFundAUMBreakdown] = useState<FundAUMRow[]>([]);
+  const [loading, setLoading]               = useState(true);
   const [fundFilter, setFundFilter]         = useState('All');
   const [catFilter, setCatFilter]           = useState('All');
   const [coinvestorFilter, setCoinvestorFilter] = useState('All');
@@ -56,7 +66,12 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/portfolio')
       .then((r) => r.json())
-      .then((data) => { setCompanies(data.companies || []); setFundSizes(data.fundSizes || { ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 }); setLoading(false); });
+      .then((data) => {
+        setCompanies(data.companies || []);
+        setFundSizes(data.fundSizes || { ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 });
+        setFundAUMBreakdown(data.fundAUMBreakdown || []);
+        setLoading(false);
+      });
   }, []);
 
   const toggleExpand = (name: string) =>
@@ -66,58 +81,14 @@ export default function Home() {
       return next;
     });
 
-  // ── Firm AUM ─────────────────────────────────────────────────────────────
-  let ac1Invested = 0, ac1Value = 0;
-  let ac2Invested = 0, ac2Value = 0;
-  let ac3Invested = 0, ac3Value = 0;
-  let catalystValue = 0;
-  let aces0Invested = 0, aces0Value = 0;
-  let aces1Invested = 0, aces1Value = 0;
-  for (const c of companies) {
-    if (c.ac1Investment) {
-      ac1Invested += c.ac1Investment;
-      ac1Value    += c.ac1ResidualValue;
-    }
-    if (c.ac2Investment) {
-      ac2Invested += c.ac2Investment;
-      ac2Value    += c.ac2ResidualValue;
-    }
-    if (c.ac3Investment) {
-      ac3Invested += c.ac3Investment;
-      ac3Value    += c.ac3ResidualValue;
-    }
-    if (c.catalystInvestment) {
-      catalystValue += c.catalystResidualValue;
-    }
-    if (c.aces0Investment) {
-      aces0Invested += c.aces0Investment;
-      aces0Value    += c.aces0ResidualValue;
-    }
-    if (c.aces1Investment) {
-      aces1Invested += c.aces1Investment;
-      aces1Value    += c.aces1ResidualValue;
-    }
-  }
-  const ac1AUM   = fundSizes.ac1   > 0 ? (fundSizes.ac1   - ac1Invested   + ac1Value)   : ac1Value;
-  const ac2AUM   = fundSizes.ac2   > 0 ? (fundSizes.ac2   - ac2Invested   + ac2Value)   : ac2Value;
-  const ac3AUM   = fundSizes.ac3   > 0 ? (fundSizes.ac3   - ac3Invested   + ac3Value)   : ac3Value;
-  const aces0AUM = fundSizes.aces0 > 0 ? (fundSizes.aces0 - aces0Invested + aces0Value) : aces0Value;
-  const aces1AUM = fundSizes.aces1 > 0 ? (fundSizes.aces1 - aces1Invested + aces1Value) : aces1Value;
-  const firmAUM  = ac1AUM + ac2AUM + ac3AUM + catalystValue + aces0AUM + aces1AUM;
-
-  const aumBreakdown: {
-    label: string;
-    dryPowder: number | null;
-    deployedValue: number;
-    total: number;
-  }[] = [
-    { label: 'AC1',      dryPowder: fundSizes.ac1   > 0 ? fundSizes.ac1   - ac1Invested   : null, deployedValue: ac1Value,    total: ac1AUM    },
-    { label: 'AC2',      dryPowder: fundSizes.ac2   > 0 ? fundSizes.ac2   - ac2Invested   : null, deployedValue: ac2Value,    total: ac2AUM    },
-    { label: 'AC3',      dryPowder: fundSizes.ac3   > 0 ? fundSizes.ac3   - ac3Invested   : null, deployedValue: ac3Value,    total: ac3AUM    },
-    { label: 'Catalyst', dryPowder: null,                                                         deployedValue: catalystValue, total: catalystValue },
-    { label: 'ACES 0',  dryPowder: fundSizes.aces0 > 0 ? fundSizes.aces0 - aces0Invested : null, deployedValue: aces0Value,  total: aces0AUM  },
-    { label: 'ACES 1',  dryPowder: fundSizes.aces1 > 0 ? fundSizes.aces1 - aces1Invested : null, deployedValue: aces1Value,  total: aces1AUM  },
-  ].filter((row) => row.total > 0 || row.deployedValue > 0 || (row.dryPowder !== null && row.dryPowder > 0));
+  // ── Firm AUM — sourced from Track Record summary tab via API ─────────────
+  // fundAUMBreakdown is pre-computed server-side:
+  //   committed = Committed/Paid-In Capital from Track Record
+  //   invested  = Total Invested Capital (col J)
+  //   uninvested = max(0, committed − invested)
+  //   remainingValue = Remaining Value of Invested (col N)
+  //   fundAUM = remainingValue + uninvested
+  const firmAUM = fundAUMBreakdown.reduce((s, f) => s + f.fundAUM, 0);
 
   // ── Filter ────────────────────────────────────────────────────────────────
   // Returns the dollars invested in a company that count under the current
@@ -127,7 +98,7 @@ export default function Home() {
     if (fundFilter === 'AC1')      return c.ac1Investment;
     if (fundFilter === 'AC2')      return c.ac2Investment;
     if (fundFilter === 'AC3')      return c.ac3Investment;
-    if (fundFilter === 'Catalyst') return c.catalystInvestment;
+    if (fundFilter === 'Catalyst 0') return c.catalystInvestment;
     if (fundFilter === 'ACES 0')   return c.aces0Investment;
     if (fundFilter === 'ACES 1')   return c.aces1Investment;
     return c.ac1Investment + c.ac2Investment + c.ac3Investment + c.catalystInvestment + c.aces0Investment + c.aces1Investment;
@@ -173,7 +144,7 @@ export default function Home() {
         (fundFilter === 'AC1'      && c.ac1Investment > 0)      ||
         (fundFilter === 'AC2'      && c.ac2Investment > 0)      ||
         (fundFilter === 'AC3'      && c.ac3Investment > 0)      ||
-        (fundFilter === 'Catalyst' && c.catalystInvestment > 0) ||
+        (fundFilter === 'Catalyst 0' && c.catalystInvestment > 0) ||
         (fundFilter === 'ACES 0'   && c.aces0Investment > 0)    ||
         (fundFilter === 'ACES 1'   && c.aces1Investment > 0);
       const cat = c.category.toLowerCase();
@@ -208,7 +179,7 @@ export default function Home() {
       totalInvested += c.ac3Investment;
       totalValue    += c.ac3CurrentValue;
     }
-    if ((fundFilter === 'All' || fundFilter === 'Catalyst') && c.catalystInvestment) {
+    if ((fundFilter === 'All' || fundFilter === 'Catalyst 0') && c.catalystInvestment) {
       totalInvested += c.catalystInvestment;
       totalValue    += c.catalystCurrentValue;
     }
@@ -279,10 +250,10 @@ export default function Home() {
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Firm AUM</p>
           <p className="text-2xl font-medium text-gray-900">{fmtUSDFull(firmAUM)}</p>
 
-          {/* Hover breakdown */}
+          {/* Hover breakdown — 5-column AUM table */}
           <div
             className="
-              absolute top-full right-0 mt-2 z-50 w-[26rem]
+              absolute top-full right-0 mt-2 z-50 w-[44rem]
               bg-white border border-gray-200 rounded-xl shadow-lg p-4
               opacity-0 invisible pointer-events-none
               group-hover:opacity-100 group-hover:visible
@@ -296,32 +267,39 @@ export default function Home() {
               <thead>
                 <tr className="text-xs text-gray-400 uppercase tracking-wide">
                   <th className="text-left font-normal pb-2">Fund</th>
+                  <th className="text-right font-normal pb-2">Committed / Paid-In</th>
+                  <th className="text-right font-normal pb-2">Invested</th>
                   <th className="text-right font-normal pb-2">Uninvested</th>
-                  <th className="text-right font-normal pb-2">Deployed Value</th>
-                  <th className="text-right font-normal pb-2">Total</th>
+                  <th className="text-right font-normal pb-2">Remaining Value</th>
+                  <th className="text-right font-normal pb-2">Fund AUM</th>
                 </tr>
               </thead>
               <tbody>
-                {aumBreakdown.map((row) => (
+                {fundAUMBreakdown.map((row) => (
                   <tr key={row.label} className="text-gray-900">
                     <td className="py-1">{row.label}</td>
-                    <td className="text-right py-1 text-gray-500">
-                      {row.dryPowder === null ? '—' : fmtUSDFull(row.dryPowder)}
-                    </td>
-                    <td className="text-right py-1">
-                      {fmtUSDFull(row.deployedValue)}
-                    </td>
-                    <td className="text-right py-1 font-medium">
-                      {fmtUSDFull(row.total)}
-                    </td>
+                    <td className="text-right py-1 text-gray-500">{fmtUSDFull(row.committed)}</td>
+                    <td className="text-right py-1">{fmtUSDFull(row.invested)}</td>
+                    <td className="text-right py-1 text-gray-500">{fmtUSDFull(row.uninvested)}</td>
+                    <td className="text-right py-1">{fmtUSDFull(row.remainingValue)}</td>
+                    <td className="text-right py-1 font-medium">{fmtUSDFull(row.fundAUM)}</td>
                   </tr>
                 ))}
-                <tr className="border-t border-gray-200">
-                  <td className="pt-2 font-medium">Firm AUM</td>
-                  <td colSpan={2}></td>
-                  <td className="text-right pt-2 font-medium">
-                    {fmtUSDFull(firmAUM)}
+                <tr className="border-t border-gray-200 font-semibold">
+                  <td className="pt-2">Firm AUM</td>
+                  <td className="text-right pt-2 text-gray-500">
+                    {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.committed, 0))}
                   </td>
+                  <td className="text-right pt-2">
+                    {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.invested, 0))}
+                  </td>
+                  <td className="text-right pt-2 text-gray-500">
+                    {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.uninvested, 0))}
+                  </td>
+                  <td className="text-right pt-2">
+                    {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.remainingValue, 0))}
+                  </td>
+                  <td className="text-right pt-2">{fmtUSDFull(firmAUM)}</td>
                 </tr>
               </tbody>
             </table>
@@ -331,7 +309,7 @@ export default function Home() {
 
       {/* ── Filters ── */}
       <div className="flex items-center gap-2 flex-wrap mb-8">
-        {['All', 'AC1', 'AC2', 'AC3', 'Catalyst', 'ACES 0', 'ACES 1'].map((f) => (
+        {['All', 'AC1', 'AC2', 'AC3', 'Catalyst 0', 'ACES 0', 'ACES 1'].map((f) => (
           <button
             key={f}
             onClick={() => setFundFilter(f)}
@@ -389,7 +367,7 @@ export default function Home() {
             { label: 'AC1',      investment: company.ac1Investment,      value: company.ac1CurrentValue,      moic: company.ac1MOIC,      ownership: company.ac1Ownership,      shares: company.ac1Shares,      safeCap: company.ac1SafeCap      },
             { label: 'AC2',      investment: company.ac2Investment,      value: company.ac2CurrentValue,      moic: company.ac2MOIC,      ownership: company.ac2Ownership,      shares: company.ac2Shares,      safeCap: company.ac2SafeCap      },
             { label: 'AC3',      investment: company.ac3Investment,      value: company.ac3CurrentValue,      moic: company.ac3MOIC,      ownership: company.ac3Ownership,      shares: company.ac3Shares,      safeCap: company.ac3SafeCap      },
-            { label: 'Catalyst', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap },
+            { label: 'Catalyst 0', investment: company.catalystInvestment, value: company.catalystCurrentValue, moic: company.catalystMOIC, ownership: company.catalystOwnership, shares: company.catalystShares, safeCap: company.catalystSafeCap },
             { label: 'ACES 0',  investment: company.aces0Investment,    value: company.aces0CurrentValue,    moic: company.aces0MOIC,    ownership: company.aces0Ownership,    shares: company.aces0Shares,    safeCap: company.aces0SafeCap    },
             { label: 'ACES 1',  investment: company.aces1Investment,    value: company.aces1CurrentValue,    moic: company.aces1MOIC,    ownership: company.aces1Ownership,    shares: company.aces1Shares,    safeCap: company.aces1SafeCap    },
           ].filter((f) => f.investment > 0);
@@ -425,23 +403,21 @@ export default function Home() {
                       onClick={(e) => e.stopPropagation()}
                       className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden hover:border-amber-300 transition-colors"
                     >
-                      <Image
-                        src={`/logos/${slug}.png`}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/logos/${slug}`}
                         alt={company.name}
-                        width={40}
-                        height={40}
-                        className="object-contain"
+                        className="h-10 w-10 object-contain"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     </a>
                   ) : (
                     <div className="w-10 h-10 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                      <Image
-                        src={`/logos/${slug}.png`}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/logos/${slug}`}
                         alt={company.name}
-                        width={40}
-                        height={40}
-                        className="object-contain"
+                        className="h-10 w-10 object-contain"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     </div>

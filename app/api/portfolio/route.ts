@@ -10,12 +10,65 @@ const parsePct = (s: string) => {
 };
 
 // ── Sheet IDs ────────────────────────────────────────────────────────────────
-const DASHBOARD_SHEET_ID = process.env.NEXT_PUBLIC_SHEET_ID!;
+// Source of truth for company identity (do NOT edit this sheet)
+const PORTFOLIO_COMPANIES_SHEET_ID = '1YYUnPtsWURRN2G5Y5XezQSliUlY5WTsAGM6Qx_rNMZw';
 const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1CzUwhToTXvBx-ott14vSY4_ebRPD48DPuVTSIUgNRdw';
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 
-// Legal name now comes from Column I of the Portfolio Dashboard sheet.
-// No more hardcoded NAME_MAP needed.
+// All company tabs in the Fundraising Strategy Guide sheet
+// (used for batch-fetching lead investor data)
+const COMPANY_TAB_NAMES = [
+  'Vital Lyfe','Vast','Varda','Trellis','Tomos Devices','Tandem',
+  'Spec','Strata','Sentient Machines','Sea12','River','Remento',
+  'Radiant','Polyphron','Observed Matter','Northwood','Nexa','Neion',
+  'Nebex','NanduX','Mobius','Mesh Optical','Mantari','Maka Media',
+  'Loci','Lazarus','Kyma','Keyframe','K2 Space','Julumuqi',
+  'International Autonomy','Integral','Higlo','Halltech','Grounded',
+  'GrayPass','General Intelligence Labs','Galadyne','Fyn','Freckle',
+  'Fluidstack','Float Health','Eridale','Enoda','Drift Robotics',
+  'Crew','Cosmic Robotics','ConductorAI','Ceres','Cala','Blitz',
+  'Biosphere','Bels','Atolla Skin Health','Atlas','Aran','Aptamino',
+  'AnySignal','Andrenam','a37','4D Surgical',
+];
+
+// Batch-fetch the INVESTORS section from every company tab.
+// Returns: { [companyName]: { [roundName]: leadFirmNames[] } }
+async function fetchCompanyLeads(): Promise<Record<string, Record<string, string[]>>> {
+  const rangeParams = COMPANY_TAB_NAMES.map(
+    name => `ranges=${encodeURIComponent(`'${name}'!A1:F60`)}`
+  ).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${PORTFOLIO_COMPANIES_SHEET_ID}/values:batchGet?${rangeParams}&key=${API_KEY}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 3600 } });
+    if (!res.ok) return {};
+    const data = await res.json();
+    const result: Record<string, Record<string, string[]>> = {};
+    for (const vr of (data.valueRanges || [])) {
+      const rangeStr = (vr.range || '') as string;
+      const tabName = rangeStr.split('!')[0].replace(/'/g, '');
+      const rows = ((vr.values || []) as string[][]);
+      let inInvestors = false;
+      let pastHeader = false;
+      const leads: Record<string, string[]> = {};
+      for (const row of rows) {
+        const col0 = (row[0] || '').trim();
+        if (col0 === 'INVESTORS') { inInvestors = true; continue; }
+        if (!inInvestors) continue;
+        if (!pastHeader) { pastHeader = true; continue; } // skip header row
+        const firm  = (row[0] || '').trim();
+        const round = (row[2] || '').trim();
+        const role  = (row[3] || '').trim().toLowerCase();
+        if (!firm || !round) continue;
+        if (role === 'lead' || role === 'co-lead') {
+          if (!leads[round]) leads[round] = [];
+          if (!leads[round].includes(firm)) leads[round].push(firm);
+        }
+      }
+      result[tabName] = leads;
+    }
+    return result;
+  } catch { return {}; }
+}
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 async function fetchSheet(sheetId: string, range: string, unformatted = false) {
@@ -238,47 +291,139 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
   };
 }
 
+// Type alias for a tranche detail record (mirrors the inline type in FundSummary)
+type TrancheDetail = FundSummary['tranches'][number];
+
+// Apply lead investor data (from company tabs) to already-aggregated tranche details.
+// Matches by stage first; falls back to a case-insensitive instrument substring match.
+// Only fills in leadInvestor if it isn't already populated from the Track Record tab.
+function applyLeadsTranches(
+  tranches: TrancheDetail[],
+  compLeads: Record<string, string[]>
+): TrancheDetail[] {
+  if (!Object.keys(compLeads).length) return tranches;
+  return tranches.map(t => {
+    const existing = (t.leadInvestor || '').trim();
+    // Build candidate lead list by stage, then by instrument substring
+    const lead =
+      compLeads[t.stage] ||
+      Object.entries(compLeads).find(([k]) =>
+        t.instrument.toLowerCase().includes(k.toLowerCase())
+      )?.[1] ||
+      null;
+    if (lead && lead.length > 0 && !existing) {
+      return { ...t, leadInvestor: lead.join(', ') };
+    }
+    return t;
+  });
+}
+
 export async function GET() {
   try {
-    // ── 1. Fetch the Portfolio Dashboard sheet (company identity) ─────────
-    const dashRange = 'Sheet1!B3:S100';
-    const dashRows = await fetchSheet(DASHBOARD_SHEET_ID, dashRange);
+    // ── 1. Fetch company list from Portfolio Companies tab ────────────────
+    // Sheet: Fundraising Strategy Guide (read-only — NEVER edit)
+    // Rows: 1=blank, 2=title "Portfolio Companies", 3=column headers, 4+=data
+    const portfolioRows = await fetchSheet(
+      PORTFOLIO_COMPANIES_SHEET_ID,
+      "'Portfolio Companies'!B1:L200",
+      true
+    );
 
-    if (dashRows.length === 0) return NextResponse.json({ companies: [], fundSizes: { ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 } });
-
-    // ── 2. Fetch the Track Record fund tabs + summary ─────────────────────
-    const [f1Rows, f2Rows, f3Rows, ciRows, aces0Rows, aces1Rows, trSummaryRows] = await Promise.all([
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'AC \"1\"'!A1:AR60", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'AC 2'!A1:AJ50", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'AC 3'!A1:AJ75", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'C 0'!A1:AQ30", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'ACES \"0\"'!A1:AQ50", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'ACES 1'!A1:AQ50", true),
-      fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:F100", true),
-    ]);
-
-    // ── 2b. Parse committed capital from Track Record summary tab ────────
-    let ac1FundSize = 0;
-    let ac2FundSize = 0;
-    let ac3FundSize = 0;
-    let aces0FundSize = 0;
-    let aces1FundSize = 0;
-    for (const row of trSummaryRows) {
-      const hasCommitted = row.some(cell => (cell || '').includes('Committed Capital'));
-      if (!hasCommitted) continue;
-      const fundLabel = (row[1] || '').trim();
-      let fundSize = 0;
-      for (let idx = 3; idx < row.length; idx++) {
-        const v = parseNum(row[idx] || '');
-        if (v > 0) { fundSize = v; break; }
-      }
-      if      (fundLabel === 'Fund III' || fundLabel === 'AC 3')   ac3FundSize   = fundSize;
-      else if (fundLabel === 'Fund II'  || fundLabel === 'AC 2')   ac2FundSize   = fundSize;
-      else if (fundLabel === 'Fund I'   || fundLabel === 'AC "1"') ac1FundSize   = fundSize;
-      else if (fundLabel === 'ACES "0"' || fundLabel === 'ACES 0') aces0FundSize = fundSize;
-      else if (fundLabel === 'ACES 1')                              aces1FundSize = fundSize;
+    if (portfolioRows.length === 0) {
+      return NextResponse.json({
+        companies: [],
+        fundSizes: { ac1: 0, ac2: 0, ac3: 0, aces0: 0, aces1: 0 },
+        fundAUMBreakdown: [],
+      });
     }
 
+    // ── 2. Fetch Track Record tabs + AUM summary + company lead investors ─
+    const [f1Rows, f2Rows, f3Rows, ciRows, aces0Rows, aces1Rows, trSummaryRows, companyLeads] =
+      await Promise.all([
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'AC \"1\"'!A1:AR60",   true),
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'AC 2'!A1:AJ50",       true),
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'AC 3'!A1:AJ75",       true),
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'C 0'!A1:AQ30",        true),
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'ACES \"0\"'!A1:AQ50", true),
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'ACES 1'!A1:AQ50",     true),
+        // Expanded to P (16 cols) to capture col J (Invested) and col N (RV)
+        fetchSheet(TRACK_RECORD_SHEET_ID, "'Track Record'!A1:P200", true),
+        fetchCompanyLeads(),
+      ]);
+
+    // ── 2b. Parse AUM breakdown from Track Record summary tab ─────────────
+    // Each fund header row contains "Committed Capital:" or "Paid-In Capital:"
+    //   col B (idx 1) = fund label
+    //   first positive value at idx 3+ = committed / paid-in capital
+    //   col J (idx 9) = Total Invested Capital
+    //   col N (idx 13) = Remaining Value of Invested
+    // FUND-LEVEL AUM = Remaining Value + max(0, Committed − Invested)
+    interface FundAUMRow {
+      label: string;
+      committed: number;
+      invested: number;
+      uninvested: number;
+      remainingValue: number;
+      fundAUM: number;
+    }
+
+    const fundAUMMap: Record<string, FundAUMRow> = {};
+    let ac1FundSize   = 0;
+    let ac2FundSize   = 0;
+    let ac3FundSize   = 0;
+    let aces0FundSize = 0;
+    let aces1FundSize = 0;
+
+    for (const row of trSummaryRows) {
+      const hasCapital = row.some(
+        cell => (cell || '').includes('Committed Capital') || (cell || '').includes('Paid-In Capital')
+      );
+      if (!hasCapital) continue;
+
+      const fundLabel = (row[1] || '').trim();
+
+      // Find committed/paid-in capital: first positive number starting at col D (idx 3)
+      let committed = 0;
+      for (let idx = 3; idx <= 8; idx++) {
+        const v = parseNum(row[idx] || '');
+        if (v > 0) { committed = v; break; }
+      }
+
+      const invested   = parseNum(row[9]  || '');   // col J
+      const rv         = parseNum(row[13] || '');   // col N
+      const uninvested = Math.max(0, committed - invested);
+      const fundAUM    = rv + uninvested;
+
+      let key = '';
+      let displayLabel = '';
+
+      if (fundLabel === 'Fund III' || fundLabel === 'AC 3') {
+        key = 'ac3'; displayLabel = 'AC3'; ac3FundSize = committed;
+      } else if (fundLabel === 'Fund II' || fundLabel === 'AC 2') {
+        key = 'ac2'; displayLabel = 'AC2'; ac2FundSize = committed;
+      } else if (fundLabel === 'Fund I' || fundLabel === 'AC "1"') {
+        key = 'ac1'; displayLabel = 'AC1'; ac1FundSize = committed;
+      } else if (
+        ['C 0','C "0"','Co-Investments','Co-Investment','Catalyst','Catalyst 0'].includes(fundLabel)
+      ) {
+        key = 'catalyst'; displayLabel = 'Catalyst 0';
+      } else if (fundLabel === 'ACES "0"' || fundLabel === 'ACES 0') {
+        key = 'aces0'; displayLabel = 'ACES 0'; aces0FundSize = committed;
+      } else if (fundLabel === 'ACES 1') {
+        key = 'aces1'; displayLabel = 'ACES 1'; aces1FundSize = committed;
+      }
+
+      if (key) {
+        fundAUMMap[key] = { label: displayLabel, committed, invested, uninvested, remainingValue: rv, fundAUM };
+      }
+    }
+
+    // Ordered array for the hover table (totals computed on the frontend)
+    const fundAUMBreakdown: FundAUMRow[] = (['ac1','ac2','ac3','catalyst','aces0','aces1'] as const)
+      .filter(k => fundAUMMap[k])
+      .map(k => fundAUMMap[k]);
+
+    // ── 2c. Parse fund tranches ───────────────────────────────────────────
     // Header row is at index 4 (row 5 in sheet), data starts at index 5 (row 6)
     const f1Tranches    = parseTranches(f1Rows,    4, 5);
     const f2Tranches    = parseTranches(f2Rows,    4, 5);
@@ -287,7 +432,7 @@ export async function GET() {
     const aces0Tranches = parseTranches(aces0Rows, 4, 5);
     const aces1Tranches = parseTranches(aces1Rows, 4, 5);
 
-    // ── 3. Group tranches by legal name per fund ─────────────────────────
+    // ── 3. Group tranches by legal name per fund ──────────────────────────
     const groupByName = (tranches: Tranche[]) => {
       const map: Record<string, Tranche[]> = {};
       for (const t of tranches) {
@@ -303,9 +448,9 @@ export async function GET() {
     const aces0ByName = groupByName(aces0Tranches);
     const aces1ByName = groupByName(aces1Tranches);
 
-    // ── 4. Merge dashboard rows with Track Record data ───────────────────
-    const companies = dashRows
-      .slice(1) // skip header row
+    // ── 4. Merge portfolio rows with Track Record + lead investor data ─────
+    const companies = portfolioRows
+      .slice(3) // skip blank row + "Portfolio Companies" title row + header row
       .filter((row: string[]) => row[0])
       .map((row: string[]) => {
         const colloquialName = row[0] || '';
@@ -327,15 +472,30 @@ export async function GET() {
           if (aces1ByName[ln]) aces1Company.push(...aces1ByName[ln]);
         }
 
-        const ac1     = aggregateTranches(f1Company);
-        const ac2     = aggregateTranches(f2Company);
-        const ac3     = aggregateTranches(f3Company);
+        const ac1      = aggregateTranches(f1Company);
+        const ac2      = aggregateTranches(f2Company);
+        const ac3      = aggregateTranches(f3Company);
         const catalyst = aggregateTranches(ciCompany);
-        const aces0   = aggregateTranches(aces0Company);
-        const aces1   = aggregateTranches(aces1Company);
+        const aces0    = aggregateTranches(aces0Company);
+        const aces1    = aggregateTranches(aces1Company);
 
-        const sharesOutstanding = Math.max(ac1.sharesOutstanding, ac2.sharesOutstanding, ac3.sharesOutstanding, catalyst.sharesOutstanding, aces0.sharesOutstanding, aces1.sharesOutstanding);
-        const pricePerShare = Math.max(ac1.currentPrice, ac2.currentPrice, ac3.currentPrice, catalyst.currentPrice, aces0.currentPrice, aces1.currentPrice);
+        // Overlay lead investors from company-tab INVESTORS sections
+        const compLeads = companyLeads[colloquialName] || {};
+        ac1.tranches      = applyLeadsTranches(ac1.tranches,      compLeads);
+        ac2.tranches      = applyLeadsTranches(ac2.tranches,      compLeads);
+        ac3.tranches      = applyLeadsTranches(ac3.tranches,      compLeads);
+        catalyst.tranches = applyLeadsTranches(catalyst.tranches, compLeads);
+        aces0.tranches    = applyLeadsTranches(aces0.tranches,    compLeads);
+        aces1.tranches    = applyLeadsTranches(aces1.tranches,    compLeads);
+
+        const sharesOutstanding = Math.max(
+          ac1.sharesOutstanding, ac2.sharesOutstanding, ac3.sharesOutstanding,
+          catalyst.sharesOutstanding, aces0.sharesOutstanding, aces1.sharesOutstanding
+        );
+        const pricePerShare = Math.max(
+          ac1.currentPrice, ac2.currentPrice, ac3.currentPrice,
+          catalyst.currentPrice, aces0.currentPrice, aces1.currentPrice
+        );
 
         return {
           name:               colloquialName,
@@ -375,7 +535,7 @@ export async function GET() {
           ac3MOIC:            ac3.moic,
           ac3Ownership:       ac3.ownership,
           ac3Tranches:        ac3.tranches,
-          // ── Catalyst ───────────────────────────────────
+          // ── Catalyst 0 ─────────────────────────────────
           catalystInvestment:    catalyst.investment,
           catalystSafeCap:       catalyst.safeCap,
           catalystShares:        catalyst.shares,
@@ -411,6 +571,7 @@ export async function GET() {
     return NextResponse.json({
       companies,
       fundSizes: { ac1: ac1FundSize, ac2: ac2FundSize, ac3: ac3FundSize, aces0: aces0FundSize, aces1: aces1FundSize },
+      fundAUMBreakdown,
     });
   } catch (e) {
     console.error('Portfolio API error:', e);
