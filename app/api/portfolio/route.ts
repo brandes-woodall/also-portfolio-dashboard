@@ -12,7 +12,7 @@ const parsePct = (s: string) => {
 // ── Sheet IDs ────────────────────────────────────────────────────────────────
 // Source of truth for company identity (do NOT edit this sheet)
 const PORTFOLIO_COMPANIES_SHEET_ID = '1YYUnPtsWURRN2G5Y5XezQSliUlY5WTsAGM6Qx_rNMZw';
-const TRACK_RECORD_SHEET_ID = process.env.TRACK_RECORD_SHEET_ID || '1CzUwhToTXvBx-ott14vSY4_ebRPD48DPuVTSIUgNRdw';
+const TRACK_RECORD_SHEET_ID = '1CzUwhToTXvBx-ott14vSY4_ebRPD48DPuVTSIUgNRdw';
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_API_KEY!;
 
 // All company tabs in the Fundraising Strategy Guide sheet
@@ -115,6 +115,7 @@ interface Tranche {
   issuePrice: number;
   sharesOwned: number;
   currentPrice: number;
+  realizedValue: number;
   residualValue: number;
   totalValue: number;
   moic: number;
@@ -159,6 +160,7 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
   const colIssuePrice  = pick(findCol('Issue Price per Share'), 9);
   const colSharesOwned = pick(findCol('Number of Shares Owned'), 12);
   const colCurrentPrice = pick(findCol('Current Price per Share'), 13);
+  const colRealized    = pick(findCol('Realized Value'), 14);
   const colResidual    = pick(findCol('Residual Value'), 15);
   const colTotalValue  = pick(findCol('Total Value'), 16);
   const colMOIC        = pick(findCol('MOIC'), 18);
@@ -185,6 +187,7 @@ function parseTranches(rows: string[][], headerRow: number, dataStartRow: number
       issuePrice:        parseNum(r[colIssuePrice]),
       sharesOwned:       parseNum(r[colSharesOwned]),
       currentPrice:      parseNum(r[colCurrentPrice]),
+      realizedValue:     parseNum(r[colRealized]),
       residualValue:     parseNum(r[colResidual]),
       totalValue:        parseNum(r[colTotalValue]),
       moic:              parseNum(r[colMOIC]),
@@ -204,6 +207,7 @@ interface FundSummary {
   investment: number;
   shares: number;
   currentValue: number;   // Total Value (realized + unrealized) — used for MOIC
+  realizedValue: number;  // Realized Value (exits only)
   residualValue: number;  // Residual Value (unrealized only) — used for AUM
   moic: number;
   ownership: number;
@@ -229,13 +233,14 @@ interface FundSummary {
 
 function aggregateTranches(tranches: Tranche[]): FundSummary {
   if (tranches.length === 0) {
-    return { investment: 0, shares: 0, currentValue: 0, residualValue: 0, moic: 0, ownership: 0, sharesOutstanding: 0, currentPrice: 0, safeCap: 0, tranches: [] };
+    return { investment: 0, shares: 0, currentValue: 0, realizedValue: 0, residualValue: 0, moic: 0, ownership: 0, sharesOutstanding: 0, currentPrice: 0, safeCap: 0, tranches: [] };
   }
 
   let totalInvestment = 0;
   let totalShares = 0;
   let totalValue = 0;
   let totalResidual = 0;
+  let totalRealized = 0;
   let totalOwnership = 0;
   // Use the largest shares outstanding value (they should all be the same for a company)
   let sharesOutstanding = 0;
@@ -249,6 +254,7 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
     totalShares += t.sharesOwned;
     totalValue += t.totalValue;
     totalResidual += t.residualValue;
+    totalRealized += t.realizedValue;
     totalOwnership += t.currentOwnership;
     if (t.sharesOutstanding > sharesOutstanding) sharesOutstanding = t.sharesOutstanding;
     if (t.currentPrice > 0) currentPrice = t.currentPrice;
@@ -281,6 +287,7 @@ function aggregateTranches(tranches: Tranche[]): FundSummary {
     investment: totalInvestment,
     shares: totalShares,
     currentValue: totalValue,
+    realizedValue: totalRealized,
     residualValue: totalResidual,
     moic,
     ownership: totalOwnership,
@@ -352,40 +359,41 @@ export async function GET() {
       ]);
 
     // ── 2b. Parse committed capital from Track Record summary tab ─────────
-    // Scan every cell in every row for fund labels, then look for the
-    // "Committed Capital" / "Paid-In Capital" row that follows each label.
-    // Committed capital is the first value > $1 M found on that row.
-    // (Invested and Remaining Value come from the per-fund tranche data below,
-    //  which is already parsed from the same Track Record fund tabs.)
-    const FUND_KEY_MAP: Record<string, string> = {
-      'Fund III': 'ac3', 'AC 3': 'ac3', 'AC3': 'ac3',
-      'Fund II':  'ac2', 'AC 2': 'ac2', 'AC2': 'ac2',
-      'Fund I':   'ac1', 'AC "1"': 'ac1', 'AC1': 'ac1',
-      'C 0': 'catalyst', 'C "0"': 'catalyst',
-      'Co-Investments': 'catalyst', 'Co-Investment': 'catalyst',
-      'Catalyst': 'catalyst', 'Catalyst 0': 'catalyst',
-      'ACES "0"': 'aces0', 'ACES 0': 'aces0',
-      'ACES 1': 'aces1',
-    };
-
-    let currentFundKey = '';
+    // The Track Record summary has rows like:
+    //   ["", "Fund III", "Committed Capital: ", "", 52000000]
+    //   ["", "Catalyst (Co-Investments)", "Paid-In Capital:", "", 27298047]
+    // Fund name and capital label appear on THE SAME ROW.
+    // We find the "Committed/Paid-In Capital" cell first, then identify the
+    // fund from cells to its left, then read the value from cells to its right.
     const committedMap: Record<string, number> = {};
 
     for (const row of trSummaryRows) {
-      // Identify a fund label anywhere in the row
-      for (const cell of row) {
-        const c = (cell || '').trim();
-        if (FUND_KEY_MAP[c]) { currentFundKey = FUND_KEY_MAP[c]; break; }
-      }
-      // Check if this row declares a committed / paid-in capital amount
-      const hasCapital = row.some(c =>
+      // Find the capital-label cell index
+      const capIdx = row.findIndex(c =>
         (c || '').includes('Committed Capital') || (c || '').includes('Paid-In Capital')
       );
-      if (hasCapital && currentFundKey && !committedMap[currentFundKey]) {
-        for (const cell of row) {
-          const v = parseNum(cell || '');
-          if (v > 1_000_000) { committedMap[currentFundKey] = v; break; }
-        }
+      if (capIdx < 0) continue;
+
+      // Identify fund key from cells before the capital label
+      let fundKey = '';
+      for (let i = 0; i < capIdx; i++) {
+        const c = (row[i] || '').trim().toLowerCase();
+        if (!c) continue;
+        // Order matters: check longer/more-specific prefixes first
+        if (c.startsWith('fund iii') || c.startsWith('ac 3') || c === 'ac3')       { fundKey = 'ac3';      break; }
+        if (c.startsWith('fund ii')  || c.startsWith('ac 2') || c === 'ac2')       { fundKey = 'ac2';      break; }
+        if (c.startsWith('fund i')   || c.startsWith('ac "1"') || c === 'ac1')     { fundKey = 'ac1';      break; }
+        if (c.startsWith('aces') && (c.includes('"0"') || /aces [^1]/.test(c) || c === 'aces 0')) { fundKey = 'aces0'; break; }
+        if (c.startsWith('aces') && (c.includes(' 1') || c.startsWith('aces 1')))  { fundKey = 'aces1';    break; }
+        if (c.startsWith('catalyst') || c.startsWith('c 0') || c.startsWith('c "0"') || c.includes('co-investment')) { fundKey = 'catalyst'; break; }
+      }
+
+      if (!fundKey || committedMap[fundKey]) continue;
+
+      // Value is in a cell to the right of the capital label
+      for (let i = capIdx + 1; i < row.length; i++) {
+        const v = parseNum(row[i] || '');
+        if (v > 100_000) { committedMap[fundKey] = v; break; }
       }
     }
 
@@ -418,25 +426,35 @@ export async function GET() {
       aces0:    aces0Tranches.reduce((s, t) => s + t.residualValue, 0),
       aces1:    aces1Tranches.reduce((s, t) => s + t.residualValue, 0),
     };
+    const fundRealized: Record<string, number> = {
+      ac1:      f1Tranches.reduce((s, t) => s + t.realizedValue, 0),
+      ac2:      f2Tranches.reduce((s, t) => s + t.realizedValue, 0),
+      ac3:      f3Tranches.reduce((s, t) => s + t.realizedValue, 0),
+      catalyst: ciTranches.reduce((s, t) => s + t.realizedValue, 0),
+      aces0:    aces0Tranches.reduce((s, t) => s + t.realizedValue, 0),
+      aces1:    aces1Tranches.reduce((s, t) => s + t.realizedValue, 0),
+    };
     const FUND_DISPLAY: Record<string, string> = {
-      ac1: 'AC1', ac2: 'AC2', ac3: 'AC3',
+      ac1: 'AC 1', ac2: 'AC 2', ac3: 'AC 3',
       catalyst: 'Catalyst 0', aces0: 'ACES 0', aces1: 'ACES 1',
     };
 
     interface FundAUMRow {
-      label: string; committed: number; invested: number;
-      uninvested: number; remainingValue: number; fundAUM: number;
+      label: string; committed: number; invested: number; uninvested: number;
+      realized: number; remainingValue: number; totalValue: number; fundAUM: number;
     }
     const fundAUMBreakdown: FundAUMRow[] = (
-      ['ac1','ac2','ac3','catalyst','aces0','aces1'] as const
+      ['ac3','ac2','ac1','catalyst','aces0','aces1'] as const
     )
       .filter(k => (fundInvested[k] || 0) > 0 || (committedMap[k] || 0) > 0)
       .map(k => {
         const committed  = committedMap[k] || 0;
         const invested   = fundInvested[k] || 0;
+        const realized   = fundRealized[k] || 0;
         const rv         = fundRV[k] || 0;
         const uninvested = Math.max(0, committed - invested);
-        return { label: FUND_DISPLAY[k], committed, invested, uninvested, remainingValue: rv, fundAUM: rv + uninvested };
+        const totalValue = realized + rv;
+        return { label: FUND_DISPLAY[k], committed, invested, uninvested, realized, remainingValue: rv, totalValue, fundAUM: rv + uninvested };
       });
 
     const ac1FundSize   = committedMap['ac1']   || 0;

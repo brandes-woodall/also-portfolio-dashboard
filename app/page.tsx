@@ -50,7 +50,9 @@ export default function Home() {
     committed: number;
     invested: number;
     uninvested: number;
+    realized: number;
     remainingValue: number;
+    totalValue: number;
     fundAUM: number;
   };
 
@@ -250,10 +252,10 @@ export default function Home() {
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Firm AUM</p>
           <p className="text-2xl font-medium text-gray-900">{fmtUSDFull(firmAUM)}</p>
 
-          {/* Hover breakdown — 5-column AUM table */}
+          {/* Hover breakdown — 7-column AUM table */}
           <div
             className="
-              absolute top-full right-0 mt-2 z-50 w-[44rem]
+              absolute top-full right-0 mt-2 z-50 w-[62rem]
               bg-white border border-gray-200 rounded-xl shadow-lg p-4
               opacity-0 invisible pointer-events-none
               group-hover:opacity-100 group-hover:visible
@@ -270,23 +272,27 @@ export default function Home() {
                   <th className="text-right font-normal pb-2">Committed / Paid-In</th>
                   <th className="text-right font-normal pb-2">Invested</th>
                   <th className="text-right font-normal pb-2">Uninvested</th>
-                  <th className="text-right font-normal pb-2">Remaining Value</th>
+                  <th className="text-right font-normal pb-2">Realized</th>
+                  <th className="text-right font-normal pb-2">Remaining</th>
+                  <th className="text-right font-normal pb-2">Total Value</th>
                   <th className="text-right font-normal pb-2">Fund AUM</th>
                 </tr>
               </thead>
               <tbody>
                 {fundAUMBreakdown.map((row) => (
                   <tr key={row.label} className="text-gray-900">
-                    <td className="py-1">{row.label}</td>
+                    <td className="py-1 pr-3">{row.label}</td>
                     <td className="text-right py-1 text-gray-500">{fmtUSDFull(row.committed)}</td>
                     <td className="text-right py-1">{fmtUSDFull(row.invested)}</td>
                     <td className="text-right py-1 text-gray-500">{fmtUSDFull(row.uninvested)}</td>
+                    <td className="text-right py-1">{fmtUSDFull(row.realized)}</td>
                     <td className="text-right py-1">{fmtUSDFull(row.remainingValue)}</td>
+                    <td className="text-right py-1 text-gray-500">{fmtUSDFull(row.totalValue)}</td>
                     <td className="text-right py-1 font-medium">{fmtUSDFull(row.fundAUM)}</td>
                   </tr>
                 ))}
                 <tr className="border-t border-gray-200 font-semibold">
-                  <td className="pt-2">Firm AUM</td>
+                  <td className="pt-2 pr-3">Firm AUM</td>
                   <td className="text-right pt-2 text-gray-500">
                     {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.committed, 0))}
                   </td>
@@ -297,7 +303,13 @@ export default function Home() {
                     {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.uninvested, 0))}
                   </td>
                   <td className="text-right pt-2">
+                    {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.realized, 0))}
+                  </td>
+                  <td className="text-right pt-2">
                     {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.remainingValue, 0))}
+                  </td>
+                  <td className="text-right pt-2 text-gray-500">
+                    {fmtUSDFull(fundAUMBreakdown.reduce((s, f) => s + f.totalValue, 0))}
                   </td>
                   <td className="text-right pt-2">{fmtUSDFull(firmAUM)}</td>
                 </tr>
